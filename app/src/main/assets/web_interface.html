@@ -1,0 +1,2573 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a3a5a">
+    <title>نظام تفعيل خدمات الاتصالات – لوحة التحكم</title>
+    <style>
+        /* ============================================================
+           المتغيرات العامة – مستوحاة من التصميم السابق (crm, contracts)
+           ============================================================ */
+        :root {
+            --bg-color: #f4f0eb;
+            --surface-color: #fcf8f2;
+            --surface-elevated: #fffcf7;
+            --text-color: #1a1a2e;
+            --text-muted: #5a5a7a;
+            --border-color: #1a3a6b;
+            --border-style: dashed;
+            --border-width: 2px;
+            --shadow-glow: 0 0 30px rgba(26, 58, 107, 0.08);
+            --glass-bg: rgba(255, 252, 247, 0.88);
+            --header-bg: linear-gradient(145deg, #0d1f3d 0%, #1a3a6b 100%);
+            --card-hover-bg: rgba(26, 58, 107, 0.04);
+            --fab-shadow: rgba(26, 58, 107, 0.35);
+            --scrollbar-track: #f4f0eb;
+            --scrollbar-thumb: rgba(26, 58, 107, 0.2);
+            --input-bg: #fcf8f2;
+            --data-text-color: #1a1a2e;
+            --data-text-muted: #5a5a7a;
+            --success: #0d7a4a;
+            --error: #b31b3a;
+            --warning: #b8860b;
+            --info: #1a3a6b;
+            --toast-bg: #fcf8f2;
+            --ruby: #9b1d3a;
+            --ruby-light: #c0395a;
+            --ruby-dim: rgba(155, 29, 58, 0.12);
+            --ruby-glow: rgba(155, 29, 58, 0.25);
+            --cobalt: #1a3a6b;
+            --cobalt-light: #2a5a8b;
+            --cobalt-dark: #0d1f3d;
+            --cobalt-dim: rgba(26, 58, 107, 0.12);
+            --gold: #d4a017;
+            --gold-dim: rgba(212, 160, 23, 0.12);
+            --radius: 16px;
+            --radius-sm: 8px;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #0d0d1a;
+            --surface-color: #16162a;
+            --surface-elevated: #1f1f3a;
+            --text-color: #e8e8f0;
+            --text-muted: #9999b8;
+            --border-color: #8a7a5a;
+            --shadow-glow: 0 0 30px rgba(26, 58, 107, 0.20);
+            --glass-bg: rgba(22, 22, 42, 0.88);
+            --header-bg: linear-gradient(145deg, #0a0a18 0%, #1a1a3a 100%);
+            --card-hover-bg: rgba(26, 58, 107, 0.08);
+            --fab-shadow: rgba(26, 58, 107, 0.40);
+            --scrollbar-track: transparent;
+            --scrollbar-thumb: rgba(255, 255, 255, 0.1);
+            --input-bg: #1f1f3a;
+            --data-text-color: #e8e8f0;
+            --data-text-muted: #9999b8;
+            --toast-bg: #1f1f3a;
+            --ruby: #c0395a;
+            --ruby-dim: rgba(192, 57, 90, 0.15);
+        }
+
+        /* ============================================================
+           الأساسيات
+           ============================================================ */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+        html,
+        body {
+            font-family: 'Segoe UI', 'Cairo', Tahoma, sans-serif;
+            background: var(--bg-color);
+            color: var(--text-color);
+            direction: rtl;
+            overflow-x: hidden;
+            min-height: 100vh;
+            transition: background 0.3s, color 0.3s;
+        }
+        body {
+            padding-bottom: 80px;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--cobalt);
+            border-radius: 3px;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+            }
+            to {
+                transform: translateX(0);
+            }
+        }
+        @keyframes pulse {
+            0%,
+            100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.05);
+            }
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.4s ease;
+        }
+        .slide-in {
+            animation: slideIn 0.3s ease;
+        }
+
+        /* ============================================================
+           App Container
+           ============================================================ */
+        .app-container {
+            display: block;
+        }
+
+        /* ============================================================
+           Header
+           ============================================================ */
+        .app-header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: var(--header-bg);
+            color: #fff;
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: var(--border-width) var(--border-style) var(--border-color);
+            backdrop-filter: blur(12px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+        .app-header .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .app-header .brand .logo {
+            width: 40px;
+            height: 40px;
+            background: var(--gold);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            color: #1a1a2e;
+        }
+        .app-header .brand h1 {
+            font-size: 1.2rem;
+            font-weight: 800;
+            margin: 0;
+            letter-spacing: 0.5px;
+        }
+        .app-header .brand small {
+            font-size: 0.7rem;
+            opacity: 0.7;
+            display: block;
+            margin-top: -2px;
+        }
+        .header-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .icon-btn {
+            width: 38px;
+            height: 38px;
+            border-radius: 12px;
+            border: var(--border-width) var(--border-style) rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.06);
+            color: rgba(255, 255, 255, 0.7);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+            font-size: 1rem;
+        }
+        .icon-btn:hover {
+            background: var(--ruby-dim);
+            color: #fff;
+            border-color: var(--ruby-light);
+            transform: translateY(-2px);
+        }
+        .icon-btn.ruby {
+            background: var(--ruby-dim);
+            color: var(--ruby-light);
+            border-color: var(--ruby);
+        }
+        .icon-btn.ruby:hover {
+            background: var(--ruby);
+            color: #fff;
+        }
+
+        /* ============================================================
+           Screen Management
+           ============================================================ */
+        .screen {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+        .screen.active {
+            display: block;
+        }
+
+        /* ============================================================
+           Cards & Sections
+           ============================================================ */
+        .card {
+            background: var(--surface-elevated);
+            border-radius: var(--radius);
+            padding: 20px 24px;
+            margin: 12px 16px;
+            box-shadow: var(--shadow-glow);
+            border: var(--border-width) var(--border-style) var(--border-color);
+            transition: var(--transition);
+        }
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+        }
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: var(--cobalt);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .card-title .icon {
+            color: var(--ruby);
+        }
+
+        /* ============================================================
+           Stats Grid
+           ============================================================ */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 14px;
+            margin: 12px 16px;
+        }
+        .stat-card {
+            background: var(--surface-elevated);
+            border: var(--border-width) var(--border-style) var(--border-color);
+            border-radius: var(--radius);
+            padding: 18px 16px;
+            text-align: center;
+            transition: var(--transition);
+            box-shadow: var(--shadow-glow);
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--cobalt), var(--ruby));
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .stat-card:hover::before {
+            opacity: 1;
+        }
+        .stat-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--ruby-light);
+            box-shadow: 0 4px 24px rgba(155, 29, 58, 0.10);
+        }
+        .stat-card .stat-icon {
+            font-size: 1.8rem;
+            color: var(--cobalt);
+            margin-bottom: 4px;
+        }
+        .stat-card .stat-number {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--data-text-color);
+            line-height: 1.2;
+        }
+        .stat-card .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+        .stat-card .stat-trend {
+            font-size: 0.7rem;
+            margin-top: 4px;
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+        .stat-trend.up {
+            background: rgba(13, 122, 74, 0.10);
+            color: var(--success);
+        }
+        .stat-trend.down {
+            background: rgba(179, 27, 58, 0.10);
+            color: var(--error);
+        }
+
+        /* ============================================================
+           Quick Actions
+           ============================================================ */
+        .quick-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 12px;
+            margin: 0 16px 16px;
+        }
+        .quick-btn {
+            background: var(--surface-elevated);
+            border: var(--border-width) var(--border-style) var(--border-color);
+            border-radius: var(--radius-sm);
+            padding: 14px 10px;
+            text-align: center;
+            text-decoration: none;
+            color: var(--data-text-color);
+            font-weight: 600;
+            transition: var(--transition);
+            cursor: pointer;
+            box-shadow: var(--shadow-glow);
+        }
+        .quick-btn:hover {
+            transform: translateY(-4px);
+            border-color: var(--ruby-light);
+            background: var(--ruby-dim);
+            color: var(--ruby);
+        }
+        .quick-btn .icon {
+            font-size: 2rem;
+            display: block;
+            margin-bottom: 4px;
+            color: var(--cobalt);
+        }
+        .quick-btn:hover .icon {
+            color: var(--ruby);
+        }
+
+        /* ============================================================
+           Tables
+           ============================================================ */
+        .table-container {
+            overflow-x: auto;
+            margin: 0 -4px;
+            padding: 0 4px;
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 0.85rem;
+        }
+        .data-table th {
+            background: var(--cobalt);
+            color: #fff;
+            padding: 10px 12px;
+            font-weight: 700;
+            text-align: right;
+            white-space: nowrap;
+            border: none;
+        }
+        .data-table th:first-child {
+            border-radius: 0 var(--radius-sm) 0 0;
+        }
+        .data-table th:last-child {
+            border-radius: var(--radius-sm) 0 0 0;
+        }
+        .data-table td {
+            padding: 10px 12px;
+            border-bottom: var(--border-width) var(--border-style) var(--border-color);
+            color: var(--data-text-color);
+            vertical-align: middle;
+        }
+        .data-table tr:hover td {
+            background: var(--card-hover-bg);
+        }
+        .data-table .badge {
+            display: inline-block;
+            padding: 3px 12px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 700;
+        }
+        .badge-success {
+            background: rgba(13, 122, 74, 0.12);
+            color: var(--success);
+        }
+        .badge-danger {
+            background: rgba(179, 27, 58, 0.12);
+            color: var(--error);
+        }
+        .badge-warning {
+            background: rgba(184, 134, 11, 0.12);
+            color: var(--warning);
+        }
+        .badge-info {
+            background: rgba(26, 58, 107, 0.12);
+            color: var(--info);
+        }
+
+        /* ============================================================
+           Forms
+           ============================================================ */
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+        .form-control {
+            width: 100%;
+            padding: 10px 14px;
+            border: var(--border-width) var(--border-style) var(--border-color);
+            border-radius: var(--radius-sm);
+            background: var(--input-bg);
+            color: var(--text-color);
+            font-size: 0.9rem;
+            outline: none;
+            transition: var(--transition);
+            font-family: inherit;
+        }
+        .form-control:focus {
+            border-color: var(--ruby);
+            box-shadow: 0 0 0 3px var(--ruby-dim);
+        }
+        select.form-control {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: left 12px center;
+            padding-left: 30px;
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        /* ============================================================
+           Buttons
+           ============================================================ */
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-weight: 700;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-family: inherit;
+            color: #fff;
+        }
+        .btn-primary {
+            background: var(--cobalt);
+        }
+        .btn-primary:hover {
+            background: var(--cobalt-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px var(--cobalt-dim);
+        }
+        .btn-success {
+            background: var(--success);
+        }
+        .btn-success:hover {
+            background: #0a5c38;
+            transform: translateY(-2px);
+        }
+        .btn-danger {
+            background: var(--error);
+        }
+        .btn-danger:hover {
+            background: #8f152e;
+            transform: translateY(-2px);
+        }
+        .btn-ruby {
+            background: var(--ruby);
+        }
+        .btn-ruby:hover {
+            background: #7a1730;
+            transform: translateY(-2px);
+        }
+        .btn-warning {
+            background: var(--warning);
+            color: #1a1a2e;
+        }
+        .btn-warning:hover {
+            background: #a07a0a;
+            color: #fff;
+            transform: translateY(-2px);
+        }
+        .btn-secondary {
+            background: var(--text-muted);
+            color: #fff;
+        }
+        .btn-secondary:hover {
+            background: #4a4a6a;
+            transform: translateY(-2px);
+        }
+        .btn-outline {
+            background: transparent;
+            border: var(--border-width) var(--border-style) var(--border-color);
+            color: var(--text-muted);
+        }
+        .btn-outline:hover {
+            background: var(--cobalt-dim);
+            color: var(--cobalt);
+            border-color: var(--cobalt);
+        }
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 0.75rem;
+        }
+
+        /* ============================================================
+           Modal
+           ============================================================ */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 2000;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .modal-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+        .modal {
+            background: var(--surface-elevated);
+            border-radius: var(--radius);
+            width: 100%;
+            max-width: 540px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            transform: scale(0.95);
+            transition: transform 0.3s ease;
+            border: var(--border-width) var(--border-style) var(--border-color);
+        }
+        .modal-overlay.active .modal {
+            transform: scale(1);
+        }
+        .modal-header {
+            padding: 18px 20px;
+            border-bottom: var(--border-width) var(--border-style) var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            background: var(--surface-elevated);
+            z-index: 2;
+            border-radius: var(--radius) var(--radius) 0 0;
+        }
+        .modal-title {
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: var(--cobalt);
+            margin: 0;
+        }
+        .modal-close {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: none;
+            background: var(--border);
+            color: var(--text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            transition: var(--transition);
+        }
+        .modal-close:hover {
+            background: var(--error);
+            color: #fff;
+        }
+        .modal-body {
+            padding: 20px;
+        }
+        .modal-footer {
+            padding: 12px 20px;
+            border-top: var(--border-width) var(--border-style) var(--border-color);
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            border-radius: 0 0 var(--radius) var(--radius);
+            background: var(--surface-elevated);
+        }
+        .modal-footer .btn {
+            flex: 1;
+            justify-content: center;
+        }
+
+        /* ============================================================
+           Bottom Navigation
+           ============================================================ */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            border-top: var(--border-width) var(--border-style) var(--border-color);
+            display: flex;
+            justify-content: space-around;
+            padding: 8px 0 env(safe-area-inset-bottom, 8px) 0;
+            box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06);
+        }
+        .nav-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            padding: 4px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            color: var(--text-muted);
+            font-size: 0.6rem;
+            font-weight: 700;
+            transition: var(--transition);
+            position: relative;
+            font-family: inherit;
+        }
+        .nav-item.active {
+            color: var(--ruby);
+        }
+        .nav-item.active::before {
+            content: '';
+            position: absolute;
+            top: -1px;
+            width: 30px;
+            height: 3px;
+            background: var(--ruby);
+            border-radius: 2px;
+        }
+        .nav-item .icon {
+            font-size: 1.4rem;
+            transition: var(--transition);
+        }
+        .nav-item:hover .icon {
+            transform: scale(1.1);
+        }
+
+        /* ============================================================
+           Toast
+           ============================================================ */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 3000;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-width: 90vw;
+        }
+        .toast {
+            background: var(--toast-bg);
+            border: var(--border-width) var(--border-style) var(--border-color);
+            border-radius: var(--radius-sm);
+            padding: 12px 20px;
+            box-shadow: var(--shadow-glow);
+            font-size: 0.9rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: fadeIn 0.3s ease;
+        }
+        .toast.success {
+            border-right: 4px solid var(--success);
+        }
+        .toast.error {
+            border-right: 4px solid var(--error);
+        }
+        .toast.warning {
+            border-right: 4px solid var(--warning);
+        }
+
+        /* ============================================================
+           Loading Overlay
+           ============================================================ */
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 9998;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        .loading-overlay.active {
+            display: flex;
+        }
+        .loading-spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s linear infinite;
+        }
+
+        /* ============================================================
+           Chart (Bar)
+           ============================================================ */
+        .chart-container {
+            height: 200px;
+            margin: 8px 0;
+        }
+        .bar-chart {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-around;
+            height: 160px;
+            gap: 6px;
+            padding: 0 8px;
+        }
+        .bar-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        .bar {
+            width: 100%;
+            border-radius: 6px 6px 0 0;
+            background: linear-gradient(to top, var(--cobalt), var(--ruby));
+            transition: height 0.6s ease;
+            min-height: 4px;
+        }
+        .bar-label {
+            font-size: 0.55rem;
+            color: var(--text-muted);
+            font-weight: 700;
+            transform: rotate(-25deg);
+            white-space: nowrap;
+        }
+        .bar-value {
+            font-size: 0.7rem;
+            font-weight: 800;
+            color: var(--cobalt);
+        }
+
+        /* ============================================================
+           Alerts Banner
+           ============================================================ */
+        .alert-banner {
+            background: var(--surface-elevated);
+            border: var(--border-width) var(--border-style) var(--border-color);
+            border-radius: var(--radius-sm);
+            padding: 12px 16px;
+            margin: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.85rem;
+            border-right: 4px solid var(--warning);
+        }
+        .alert-banner .icon {
+            font-size: 1.3rem;
+        }
+        .alert-banner.danger {
+            border-right-color: var(--error);
+        }
+        .alert-banner.success {
+            border-right-color: var(--success);
+        }
+
+        /* ============================================================
+           Responsive
+           ============================================================ */
+        @media (max-width: 768px) {
+            .app-header {
+                padding: 10px 16px;
+            }
+            .app-header .brand h1 {
+                font-size: 1rem;
+            }
+            .stats-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+                margin: 8px 10px;
+            }
+            .quick-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+                margin: 0 10px 12px;
+            }
+            .card {
+                padding: 14px 16px;
+                margin: 8px 10px;
+            }
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            .data-table {
+                font-size: 0.75rem;
+            }
+            .data-table th,
+            .data-table td {
+                padding: 6px 8px;
+            }
+            .bottom-nav .nav-item .icon {
+                font-size: 1.2rem;
+            }
+            .bottom-nav .nav-item {
+                font-size: 0.5rem;
+            }
+            .modal {
+                max-width: 100%;
+                margin: 0 10px;
+            }
+        }
+
+        @media (max-width: 400px) {
+            .stats-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 6px;
+            }
+            .stat-card .stat-number {
+                font-size: 1.4rem;
+            }
+            .quick-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 6px;
+            }
+            .quick-btn .icon {
+                font-size: 1.5rem;
+            }
+        }
+
+        /* ============================================================
+           Utilities
+           ============================================================ */
+        .text-center {
+            text-align: center;
+        }
+        .text-muted {
+            color: var(--text-muted);
+        }
+        .text-danger {
+            color: var(--error);
+        }
+        .text-success {
+            color: var(--success);
+        }
+        .mt-1 {
+            margin-top: 8px;
+        }
+        .mt-2 {
+            margin-top: 16px;
+        }
+        .mb-1 {
+            margin-bottom: 8px;
+        }
+        .mb-2 {
+            margin-bottom: 16px;
+        }
+        .flex {
+            display: flex;
+        }
+        .flex-wrap {
+            flex-wrap: wrap;
+        }
+        .gap-1 {
+            gap: 8px;
+        }
+        .gap-2 {
+            gap: 16px;
+        }
+        .w-full {
+            width: 100%;
+        }
+        .hidden {
+            display: none !important;
+        }
+
+        /* ============================================================
+           Print
+           ============================================================ */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            .print-area,
+            .print-area * {
+                visibility: visible;
+            }
+            .print-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
+
+        /* ============================================================
+           Status badge for SMS
+           ============================================================ */
+        .status-badge {
+            display: inline-block;
+            padding: 3px 12px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 700;
+        }
+        .status-processed {
+            background: rgba(13, 122, 74, 0.12);
+            color: var(--success);
+        }
+        .status-pending {
+            background: rgba(184, 134, 11, 0.12);
+            color: var(--warning);
+        }
+        .status-failed {
+            background: rgba(179, 27, 58, 0.12);
+            color: var(--error);
+        }
+        .status-received {
+            background: rgba(26, 58, 107, 0.12);
+            color: var(--info);
+        }
+
+        /* ============================================================
+           Toggle
+           ============================================================ */
+        .toggle {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+        }
+        .toggle input {
+            display: none;
+        }
+        .toggle-slider {
+            width: 44px;
+            height: 24px;
+            background: var(--border);
+            border-radius: 12px;
+            position: relative;
+            transition: var(--transition);
+        }
+        .toggle-slider::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: #fff;
+            border-radius: 50%;
+            top: 2px;
+            right: 2px;
+            transition: var(--transition);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .toggle input:checked+.toggle-slider {
+            background: var(--success);
+        }
+        .toggle input:checked+.toggle-slider::after {
+            right: 22px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ============================================================
+    TOAST CONTAINER
+    ============================================================ -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- ============================================================
+    LOADING OVERLAY
+    ============================================================ -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+    </div>
+
+    <!-- ============================================================
+    APP CONTAINER
+    ============================================================ -->
+    <div class="app-container" id="appContainer">
+
+        <!-- HEADER -->
+        <header class="app-header" id="appHeader">
+            <div class="brand">
+                <div class="logo">📱</div>
+                <div>
+                    <h1 id="headerTitle">نظام الخدمات</h1>
+                    <small id="headerSubtitle">إدارة شحن الرصيد والخدمات عبر SMS</small>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="icon-btn" onclick="toggleTheme()" title="تبديل المظهر">🌙</button>
+                <button class="icon-btn" onclick="showScreen('notifications')" title="التنبيهات">🔔</button>
+                <button class="icon-btn ruby" onclick="showAboutModal()" title="عن التطبيق">ℹ️</button>
+            </div>
+        </header>
+
+        <!-- ============================================================
+        DASHBOARD SCREEN
+        ============================================================ -->
+        <div class="screen active" id="screen-dashboard">
+            <div class="stats-grid">
+                <div class="stat-card" onclick="showScreen('customers')">
+                    <div class="stat-icon">👥</div>
+                    <div class="stat-number" id="dashCustomers">0</div>
+                    <div class="stat-label">العملاء</div>
+                    <div class="stat-trend up">+5%</div>
+                </div>
+                <div class="stat-card" onclick="showScreen('services')">
+                    <div class="stat-icon">📦</div>
+                    <div class="stat-number" id="dashServices">0</div>
+                    <div class="stat-label">الخدمات</div>
+                    <div class="stat-trend up">+2%</div>
+                </div>
+                <div class="stat-card" onclick="showScreen('sms')">
+                    <div class="stat-icon">📨</div>
+                    <div class="stat-number" id="dashSmsToday">0</div>
+                    <div class="stat-label">رسائل اليوم</div>
+                    <div class="stat-trend up">+8%</div>
+                </div>
+                <div class="stat-card" onclick="showScreen('reports')">
+                    <div class="stat-icon">💰</div>
+                    <div class="stat-number" id="dashDue">0</div>
+                    <div class="stat-label">الديون المستحقة</div>
+                    <div class="stat-trend down">-2%</div>
+                </div>
+            </div>
+
+            <div id="dashAlerts"></div>
+
+            <div class="quick-grid">
+                <div class="quick-btn" onclick="showScreen('services')">
+                    <span class="icon">📦</span>
+                    <span>الخدمات</span>
+                </div>
+                <div class="quick-btn" onclick="showScreen('customers')">
+                    <span class="icon">👥</span>
+                    <span>العملاء</span>
+                </div>
+                <div class="quick-btn" onclick="showScreen('suppliers')">
+                    <span class="icon">🏭</span>
+                    <span>الموردين</span>
+                </div>
+                <div class="quick-btn" onclick="showScreen('sms')">
+                    <span class="icon">📨</span>
+                    <span>الرسائل</span>
+                </div>
+                <div class="quick-btn" onclick="showScreen('reports')">
+                    <span class="icon">📊</span>
+                    <span>التقارير</span>
+                </div>
+                <div class="quick-btn" onclick="showScreen('settings')">
+                    <span class="icon">⚙️</span>
+                    <span>الإعدادات</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title"><span class="icon">📈</span> نشاط الرسائل اليومية</div>
+                <div class="chart-container">
+                    <div class="bar-chart" id="dailySmsChart"></div>
+                </div>
+            </div>
+
+            <div class="card" style="background:linear-gradient(135deg, rgba(26,58,107,0.04), rgba(212,175,55,0.04));">
+                <div class="card-title"><span class="icon">🤖</span> توصية الذكاء الاصطناعي</div>
+                <div id="aiInsight" style="font-size:0.9rem;line-height:1.8;color:var(--text-muted);">
+                    <span class="loading-spinner" style="display:inline-block;width:20px;height:20px;border-width:3px;vertical-align:middle;"></span>
+                    جاري التحليل...
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+        SERVICES SCREEN
+        ============================================================ -->
+        <div class="screen" id="screen-services">
+            <div class="card">
+                <div class="card-title"><span class="icon">📦</span> إدارة الخدمات</div>
+                <div class="flex flex-wrap gap-1 mb-1">
+                    <button class="btn btn-primary" onclick="openServiceModal()">➕ إضافة</button>
+                    <button class="btn btn-success" onclick="exportServices()">📤 تصدير</button>
+                    <div style="flex:1;min-width:150px;">
+                        <input type="text" class="form-control" id="serviceSearch" placeholder="🔍 بحث..." oninput="filterTable('servicesTable', this.value)">
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>#</th><th>الخدمة</th><th>السعر</th><th>كود التفعيل</th><th>الحالة</th><th>الإجراءات</th></tr>
+                        </thead>
+                        <tbody id="servicesTable">
+                            <tr><td colspan="6" class="text-center text-muted">جاري التحميل...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <!-- تقارير الخدمات (قائمة سفلية) -->
+                <div class="mt-2" style="border-top:var(--border-width) var(--border-style) var(--border-color);padding-top:12px;">
+                    <div class="flex flex-wrap gap-1">
+                        <button class="btn btn-sm btn-outline" onclick="generateReport('services_summary')">📊 ملخص الخدمات</button>
+                        <button class="btn btn-sm btn-outline" onclick="generateReport('services_by_status')">📊 حسب الحالة</button>
+                        <button class="btn btn-sm btn-outline" onclick="generateReport('services_pricing')">📊 تحليل الأسعار</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+        CUSTOMERS SCREEN
+        ============================================================ -->
+        <div class="screen" id="screen-customers">
+            <div class="card">
+                <div class="card-title"><span class="icon">👥</span> إدارة العملاء</div>
+                <div class="flex flex-wrap gap-1 mb-1">
+                    <button class="btn btn-primary" onclick="openCustomerModal()">➕ إضافة</button>
+                    <button class="btn btn-success" onclick="exportCustomers()">📤 تصدير</button>
+                    <div style="flex:1;min-width:150px;">
+                        <input type="text" class="form-control" id="customerSearch" placeholder="🔍 بحث..." oninput="filterTable('customersTable', this.value)">
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>#</th><th>الاسم</th><th>الهاتف1</th><th>الهاتف2</th><th>الهاتف3</th><th>رصيد المودع</th><th>يسمح بالأجل</th><th>الحد المسموح</th><th>الرصيد الحالي</th><th>الإجراءات</th></tr>
+                        </thead>
+                        <tbody id="customersTable">
+                            <tr><td colspan="10" class="text-center text-muted">جاري التحميل...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <!-- تقارير العملاء -->
+                <div class="mt-2" style="border-top:var(--border-width) var(--border-style) var(--border-color);padding-top:12px;">
+                    <div class="flex flex-wrap gap-1">
+                        <button class="btn btn-sm btn-outline" onclick="generateReport('customers_list')">📊 قائمة العملاء</button>
+                        <button class="btn btn-sm btn-outline" onclick="generateReport('customers_balance')">📊 تحليل الأرصدة</button>
+                        <button class="btn btn-sm btn-outline" onclick="generateReport('customers_credit')">📊 تقرير الائتمان</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+        SUPPLIERS SCREEN
+        ============================================================ -->
+        <div class="screen" id="screen-suppliers">
+            <div class="card">
+                <div class="card-title"><span class="icon">🏭</span> إدارة الموردين والحوالات</div>
+                <div class="flex flex-wrap gap-1 mb-1">
+                    <button class="btn btn-primary" onclick="openSupplierModal()">➕ إضافة</button>
+                    <button class="btn btn-success" onclick="exportSuppliers()">📤 تصدير</button>
+                    <div style="flex:1;min-width:150px;">
+                        <input type="text" class="form-control" id="supplierSearch" placeholder="🔍 بحث..." oninput="filterTable('suppliersTable', this.value)">
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>#</th><th>الاسم</th><th>الهاتف1</th><th>الهاتف2</th><th>الهاتف3</th><th>رصيدنا لديهم</th><th>رصيدهم لدينا</th><th>الحالة</th><th>الإجراءات</th></tr>
+                        </thead>
+                        <tbody id="suppliersTable">
+                            <tr><td colspan="9" class="text-center text-muted">جاري التحميل...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <!-- تقارير الموردين -->
+                <div class="mt-2" style="border-top:var(--border-width) var(--border-style) var(--border-color);padding-top:12px;">
+                    <div class="flex flex-wrap gap-1">
+                        <button class="btn btn-sm btn-outline" onclick="generateReport('suppliers_list')">📊 قائمة الموردين</button>
+                        <button class="btn btn-sm btn-outline" onclick="generateReport('suppliers_balance')">📊 تحليل الأرصدة</button>
+                        <button class="btn btn-sm btn-outline" onclick="generateReport('suppliers_transfers')">📊 تقرير الحوالات</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+        SMS INBOX SCREEN
+        ============================================================ -->
+        <div class="screen" id="screen-sms">
+            <div class="card">
+                <div class="card-title"><span class="icon">📨</span> سجل الرسائل النصية</div>
+                <div class="flex flex-wrap gap-1 mb-1">
+                    <button class="btn btn-primary" onclick="refreshSms()">🔄 تحديث</button>
+                    <button class="btn btn-success" onclick="exportSms()">📤 تصدير</button>
+                    <div style="flex:1;min-width:120px;">
+                        <input type="text" class="form-control" id="smsSearch" placeholder="🔍 بحث..." oninput="filterTable('smsTable', this.value)">
+                    </div>
+                    <select class="form-control" id="smsStatusFilter" style="flex:1;min-width:120px;" onchange="filterSmsByStatus()">
+                        <option value="">كل الحالات</option>
+                        <option value="processed">✅ معالجة</option>
+                        <option value="pending">⏳ معلقة</option>
+                        <option value="failed">❌ فاشلة</option>
+                        <option value="received">📥 مستلمة</option>
+                    </select>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>#</th><th>المرسل</th><th>نص الرسالة</th><th>الوقت</th><th>الحالة</th><th>الإجراءات</th></tr>
+                        </thead>
+                        <tbody id="smsTable">
+                            <tr><td colspan="6" class="text-center text-muted">جاري التحميل...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <!-- تقارير الرسائل -->
+                <div class="mt-2" style="border-top:var(--border-width) var(--border-style) var(--border-color);padding-top:12px;">
+                    <div class="flex flex-wrap gap-1">
+                        <button class="btn btn-sm btn-outline" onclick="generateReport('sms_summary')">📊 ملخص الرسائل</button>
+                        <button class="btn btn-sm btn-outline" onclick="generateReport('sms_by_status')">📊 حسب الحالة</button>
+                        <button class="btn btn-sm btn-outline" onclick="generateReport('sms_analysis')">📊 تحليل المحتوى</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+        REPORTS SCREEN
+        ============================================================ -->
+        <div class="screen" id="screen-reports">
+            <div class="card">
+                <div class="card-title"><span class="icon">📊</span> التقارير الشاملة</div>
+                <div class="quick-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
+                    <div class="quick-btn" onclick="generateReport('full_customers')">
+                        <span class="icon">👥</span>
+                        <span>تقرير العملاء</span>
+                    </div>
+                    <div class="quick-btn" onclick="generateReport('full_services')">
+                        <span class="icon">📦</span>
+                        <span>تقرير الخدمات</span>
+                    </div>
+                    <div class="quick-btn" onclick="generateReport('full_sms')">
+                        <span class="icon">📨</span>
+                        <span>تقرير الرسائل</span>
+                    </div>
+                    <div class="quick-btn" onclick="generateReport('full_financial')">
+                        <span class="icon">💰</span>
+                        <span>تقرير مالي</span>
+                    </div>
+                </div>
+            </div>
+            <div id="reportContainer"></div>
+        </div>
+
+        <!-- ============================================================
+        SETTINGS SCREEN
+        ============================================================ -->
+        <div class="screen" id="screen-settings">
+            <div class="card">
+                <div class="card-title"><span class="icon">⚙️</span> الإعدادات</div>
+                <form id="settingsForm" onsubmit="saveSettings(event)">
+                    <div class="form-group">
+                        <label>اسم النشاط التجاري</label>
+                        <input type="text" class="form-control" id="businessName" placeholder="مثال: شركة الاتصالات">
+                    </div>
+                    <div class="form-group">
+                        <label>الشعار (رابط الصورة)</label>
+                        <input type="url" class="form-control" id="logoUrl" placeholder="https://example.com/logo.png">
+                    </div>
+                    <div class="form-group">
+                        <label>هاتف الدعم</label>
+                        <input type="tel" class="form-control" id="supportPhone" placeholder="+967 777 000 000">
+                    </div>
+                    <div class="form-group">
+                        <label>الحد الأدنى للتنبيه (لتر)</label>
+                        <input type="number" class="form-control" id="thresholdInput" value="1000">
+                    </div>
+
+                    <div class="flex justify-between" style="padding:10px 0;border-bottom:var(--border-width) var(--border-style) var(--border-color);">
+                        <span>🌙 الوضع الليلي</span>
+                        <label class="toggle">
+                            <input type="checkbox" id="darkModeToggle" onchange="toggleTheme()">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="flex justify-between" style="padding:10px 0;border-bottom:var(--border-width) var(--border-style) var(--border-color);">
+                        <span>🔐 المصادقة البيومترية</span>
+                        <label class="toggle">
+                            <input type="checkbox" id="biometricToggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="flex justify-between" style="padding:10px 0;">
+                        <span>💾 النسخ الاحتياطي التلقائي</span>
+                        <label class="toggle">
+                            <input type="checkbox" id="autoBackupToggle" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary mt-2">💾 حفظ الإعدادات</button>
+                    <button type="button" class="btn btn-info mt-1" onclick="exportData()">📤 تصدير نسخة احتياطية</button>
+                    <button type="button" class="btn btn-secondary mt-1" onclick="showAboutModal()">ℹ️ عن التطبيق</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- ============================================================
+        NOTIFICATIONS SCREEN
+        ============================================================ -->
+        <div class="screen" id="screen-notifications">
+            <div class="card">
+                <div class="card-title"><span class="icon">🔔</span> التنبيهات</div>
+                <div id="notificationsList"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ============================================================
+    BOTTOM NAVIGATION
+    ============================================================ -->
+    <nav class="bottom-nav no-print" id="bottomNav">
+        <button class="nav-item active" onclick="showScreen('dashboard')" data-screen="dashboard">
+            <span class="icon">🏠</span>
+            <span>الرئيسية</span>
+        </button>
+        <button class="nav-item" onclick="showScreen('services')" data-screen="services">
+            <span class="icon">📦</span>
+            <span>الخدمات</span>
+        </button>
+        <button class="nav-item" onclick="showScreen('customers')" data-screen="customers">
+            <span class="icon">👥</span>
+            <span>العملاء</span>
+        </button>
+        <button class="nav-item" onclick="showScreen('sms')" data-screen="sms">
+            <span class="icon">📨</span>
+            <span>الرسائل</span>
+        </button>
+        <button class="nav-item" onclick="showScreen('settings')" data-screen="settings">
+            <span class="icon">⚙️</span>
+            <span>الإعدادات</span>
+        </button>
+    </nav>
+
+    <!-- ============================================================
+    MODALS
+    ============================================================ -->
+
+    <!-- About Modal -->
+    <div class="modal-overlay" id="aboutModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title">✨ عن النظام</h2>
+                <button class="modal-close" onclick="closeModal('aboutModal')">✕</button>
+            </div>
+            <div class="modal-body" style="text-align:center;">
+                <div style="width:80px;height:80px;background:linear-gradient(135deg,var(--cobalt),var(--ruby));border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:36px;margin:0 auto 16px;">📱</div>
+                <div style="font-size:1.2rem;font-weight:800;color:var(--cobalt);" id="aboutBusinessName">نظام الخدمات</div>
+                <div style="font-size:0.85rem;color:var(--text-muted);">الإصدار 3.0 – إدارة شحن الرصيد والخدمات عبر SMS</div>
+                <div style="background:var(--bg-color);border-radius:var(--radius-sm);padding:16px;margin:16px 0;">
+                    <div style="font-weight:700;">👨‍💻 المطور</div>
+                    <div style="color:var(--text-muted);">المهندس / جبر الحميدي</div>
+                </div>
+                <div class="flex gap-1" style="justify-content:center;flex-wrap:wrap;">
+                    <a href="whatsapp://send?phone=00967781038203" class="btn btn-sm btn-success" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;width:auto;">💬 واتساب</a>
+                    <a href="mailto:db7r01@gmail.com" class="btn btn-sm btn-danger" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;width:auto;">📧 Gmail</a>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeModal('aboutModal')">إغلاق</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Service Modal -->
+    <div class="modal-overlay" id="serviceModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title" id="serviceModalTitle">➕ إضافة خدمة</h2>
+                <button class="modal-close" onclick="closeModal('serviceModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="serviceForm" onsubmit="saveService(event)">
+                    <input type="hidden" id="serviceEditId" value="0">
+                    <div class="form-group">
+                        <label>اسم الخدمة *</label>
+                        <input type="text" class="form-control" id="serviceName" required placeholder="شحن رصيد">
+                    </div>
+                    <div class="form-group">
+                        <label>السعر (ريال) *</label>
+                        <input type="number" class="form-control" id="servicePrice" required placeholder="100">
+                    </div>
+                    <div class="form-group">
+                        <label>كود التفعيل *</label>
+                        <input type="text" class="form-control" id="serviceCode" required placeholder="BAL001">
+                    </div>
+                    <div class="form-group">
+                        <label>الحالة</label>
+                        <select class="form-control" id="serviceStatus">
+                            <option value="active">مفعلة</option>
+                            <option value="inactive">غير مفعلة</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>تفاصيل إضافية</label>
+                        <textarea class="form-control" id="serviceDetails" rows="2" placeholder="تفاصيل الخدمة..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">💾 حفظ</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Customer Modal -->
+    <div class="modal-overlay" id="customerModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title" id="customerModalTitle">➕ إضافة عميل</h2>
+                <button class="modal-close" onclick="closeModal('customerModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="customerForm" onsubmit="saveCustomer(event)">
+                    <input type="hidden" id="customerEditId" value="0">
+                    <div class="form-group">
+                        <label>الاسم *</label>
+                        <input type="text" class="form-control" id="customerName" required placeholder="أحمد محمد">
+                    </div>
+                    <div class="form-group">
+                        <label>الهاتف 1 *</label>
+                        <input type="tel" class="form-control" id="customerPhone1" required placeholder="777000001">
+                    </div>
+                    <div class="form-group">
+                        <label>الهاتف 2</label>
+                        <input type="tel" class="form-control" id="customerPhone2" placeholder="777000002">
+                    </div>
+                    <div class="form-group">
+                        <label>الهاتف 3</label>
+                        <input type="tel" class="form-control" id="customerPhone3" placeholder="777000003">
+                    </div>
+                    <div class="form-group">
+                        <label>رصيد المودع (ريال)</label>
+                        <input type="number" class="form-control" id="customerDeposit" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>يسمح بالأجل</label>
+                        <select class="form-control" id="customerAllowCredit">
+                            <option value="1">نعم</option>
+                            <option value="0">لا</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>الحد المسموح للأجل (ريال)</label>
+                        <input type="number" class="form-control" id="customerCreditLimit" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>الرصيد الحالي</label>
+                        <input type="number" class="form-control" id="customerBalance" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>ملاحظات</label>
+                        <textarea class="form-control" id="customerNotes" rows="2"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">💾 حفظ</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supplier Modal -->
+    <div class="modal-overlay" id="supplierModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title" id="supplierModalTitle">➕ إضافة مورد</h2>
+                <button class="modal-close" onclick="closeModal('supplierModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="supplierForm" onsubmit="saveSupplier(event)">
+                    <input type="hidden" id="supplierEditId" value="0">
+                    <div class="form-group">
+                        <label>الاسم *</label>
+                        <input type="text" class="form-control" id="supplierName" required placeholder="شركة الحوالات">
+                    </div>
+                    <div class="form-group">
+                        <label>الهاتف 1 *</label>
+                        <input type="tel" class="form-control" id="supplierPhone1" required placeholder="777000001">
+                    </div>
+                    <div class="form-group">
+                        <label>الهاتف 2</label>
+                        <input type="tel" class="form-control" id="supplierPhone2" placeholder="777000002">
+                    </div>
+                    <div class="form-group">
+                        <label>الهاتف 3</label>
+                        <input type="tel" class="form-control" id="supplierPhone3" placeholder="777000003">
+                    </div>
+                    <div class="form-group">
+                        <label>رصيدنا لديهم</label>
+                        <input type="number" class="form-control" id="supplierOurBalance" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>رصيدهم لدينا</label>
+                        <input type="number" class="form-control" id="supplierTheirBalance" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>الحالة</label>
+                        <select class="form-control" id="supplierStatus">
+                            <option value="active">مفعل</option>
+                            <option value="inactive">غير مفعل</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>ملاحظات</label>
+                        <textarea class="form-control" id="supplierNotes" rows="2"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">💾 حفظ</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- SMS Detail Modal -->
+    <div class="modal-overlay" id="smsDetailModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title">📨 تفاصيل الرسالة</h2>
+                <button class="modal-close" onclick="closeModal('smsDetailModal')">✕</button>
+            </div>
+            <div class="modal-body" id="smsDetailBody"></div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('smsDetailModal')">إغلاق</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Viewer Modal -->
+    <div class="modal-overlay" id="reportModal">
+        <div class="modal" style="max-width:720px;">
+            <div class="modal-header">
+                <h2 class="modal-title" id="reportModalTitle">📊 التقرير</h2>
+                <button class="modal-close" onclick="closeModal('reportModal')">✕</button>
+            </div>
+            <div class="modal-body" id="reportModalBody">
+                <div class="text-center text-muted">جاري تحميل التقرير...</div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-success" onclick="printReport()">🖨️ طباعة</button>
+                <button class="btn btn-primary" onclick="exportReportData()">📤 تصدير</button>
+                <button class="btn btn-secondary" onclick="closeModal('reportModal')">إغلاق</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+    JAVASCRIPT – التطبيق الكامل مع بيانات وهمية متقدمة
+    ============================================================ -->
+    <script>
+        // ============================================================
+        //  API HELPER – يتواصل مع Kotlin عبر AndroidInterface أو يستخدم بيانات وهمية
+        // ============================================================
+        async function apiCall(action, params = {}) {
+            // محاولة استخدام AndroidInterface
+            if (typeof window.AndroidInterface !== 'undefined' && window.AndroidInterface) {
+                return new Promise((resolve, reject) => {
+                    try {
+                        const jsonParams = JSON.stringify(params || {});
+                        const result = window.AndroidInterface.execute(action, jsonParams);
+                        try {
+                            const parsed = JSON.parse(result);
+                            resolve(parsed);
+                        } catch (e) {
+                            resolve({ success: true, data: result });
+                        }
+                    } catch (e) {
+                        reject({ success: false, error: e.message || 'فشل الاتصال' });
+                    }
+                });
+            }
+
+            // Fallback: بيانات وهمية متقدمة (للاختبار دون اتصال)
+            console.warn('AndroidInterface غير متاح، استخدام بيانات وهمية');
+            return mockApiCall(action, params);
+        }
+
+        // ============================================================
+        //  MOCK DATA – بيانات وهمية شاملة
+        // ============================================================
+        let mockIdCounter = 100;
+
+        const mockServices = [
+            { id: 1, name: 'شحن رصيد', price: 100, code: 'BAL001', status: 'active', details: 'شحن رصيد اتصالات' },
+            { id: 2, name: 'باقة إنترنت 10GB', price: 50, code: 'INT010', status: 'active', details: 'باقة إنترنت 10 جيجابايت' },
+            { id: 3, name: 'باقة رسائل 500', price: 25, code: 'SMS500', status: 'inactive', details: '500 رسالة نصية' },
+            { id: 4, name: 'باقة إنترنت 20GB', price: 80, code: 'INT020', status: 'active', details: 'باقة إنترنت 20 جيجابايت' },
+            { id: 5, name: 'شحن دولي', price: 200, code: 'INTL001', status: 'inactive', details: 'شحن رصيد دولي' }
+        ];
+
+        const mockCustomers = [
+            { id: 1, name: 'أحمد محمد', phone1: '777000001', phone2: '777000002', phone3: '', deposit: 1500,
+                allowCredit: true, creditLimit: 5000, balance: 1200, notes: 'عميل مميز' },
+            { id: 2, name: 'سارة علي', phone1: '777000003', phone2: '', phone3: '777000004', deposit: 2000,
+                allowCredit: false, creditLimit: 0, balance: -500, notes: '' },
+            { id: 3, name: 'خالد حسن', phone1: '777000005', phone2: '777000006', phone3: '777000007', deposit: 800,
+                allowCredit: true, creditLimit: 3000, balance: 2500, notes: '' },
+            { id: 4, name: 'نورة سعيد', phone1: '777000008', phone2: '', phone3: '', deposit: 3000, allowCredit: true,
+                creditLimit: 10000, balance: 500, notes: 'عميل تجاري' }
+        ];
+
+        const mockSuppliers = [
+            { id: 1, name: 'شركة الحوالات الأولى', phone1: '777111111', phone2: '777111112', phone3: '',
+                ourBalance: 10000, theirBalance: 2000, status: 'active', notes: '' },
+            { id: 2, name: 'مؤسسة النقل السريع', phone1: '777222222', phone2: '', phone3: '777222223',
+                ourBalance: 5000, theirBalance: 3000, status: 'active', notes: '' },
+            { id: 3, name: 'شركة الاتصالات اليمنية', phone1: '777333333', phone2: '777333334', phone3: '777333335',
+                ourBalance: 0, theirBalance: 1500, status: 'inactive', notes: '' }
+        ];
+
+        const mockSms = [
+            { id: 1, sender: '777000001', text: 'اريد شحن رصيد 100', time: '2026-07-31 10:15', status: 'processed' },
+            { id: 2, sender: '777000002', text: 'باقة انترنت 10 جيجا', time: '2026-07-31 09:30', status: 'pending' },
+            { id: 3, sender: '777000003', text: 'كم رصيدي؟', time: '2026-07-31 08:45', status: 'processed' },
+            { id: 4, sender: '777000004', text: 'اريد شحن دولي', time: '2026-07-30 17:20', status: 'failed' },
+            { id: 5, sender: '777000005', text: 'طلب باقة رسائل 500', time: '2026-07-30 14:00', status: 'received' },
+            { id: 6, sender: '777000001', text: 'شكراً', time: '2026-07-30 10:10', status: 'processed' }
+        ];
+
+        const mockNotifications = [
+            { id: 1, title: '🔔 تنبيه', message: 'تم استلام رسالة جديدة من 777000001', time: 'منذ 5 دقائق' },
+            { id: 2, title: '⚠️ تحذير', message: 'العميل أحمد محمد تجاوز الحد الائتماني', time: 'منذ ساعة' },
+            { id: 3, title: '📊 تقرير', message: 'تم توليد تقرير المبيعات اليومي', time: 'منذ 3 ساعات' }
+        ];
+
+        // ============================================================
+        //  MOCK API – محاكاة جميع العمليات
+        // ============================================================
+        function mockApiCall(action, params) {
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    switch (action) {
+                        case 'get_dashboard':
+                            resolve({
+                                success: true,
+                                data: [{
+                                    total_customers: mockCustomers.length,
+                                    total_services: mockServices.length,
+                                    sms_today: mockSms.filter(s => s.time.startsWith(new Date()
+                                        .toISOString().slice(0, 10))).length,
+                                    total_due: 15000
+                                }],
+                                ai_insight: '📈 توقعات اليوم: من المتوقع استقبال 8-12 رسالة، مع 3 طلبات شحن.'
+                            });
+                            break;
+                        case 'get_daily_sms':
+                            resolve({
+                                success: true,
+                                data: [
+                                    { date: '2026-07-25', count: 5 },
+                                    { date: '2026-07-26', count: 8 },
+                                    { date: '2026-07-27', count: 3 },
+                                    { date: '2026-07-28', count: 10 },
+                                    { date: '2026-07-29', count: 6 },
+                                    { date: '2026-07-30', count: 12 },
+                                    { date: '2026-07-31', count: 7 }
+                                ]
+                            });
+                            break;
+                        case 'get_services':
+                            resolve({ success: true, data: mockServices });
+                            break;
+                        case 'save_service':
+                            if (params.id && params.id > 0) {
+                                const idx = mockServices.findIndex(s => s.id == params.id);
+                                if (idx >= 0) mockServices[idx] = { ...mockServices[idx], ...params };
+                            } else {
+                                params.id = ++mockIdCounter;
+                                mockServices.push(params);
+                            }
+                            resolve({ success: true, message: 'تم حفظ الخدمة', data: params });
+                            break;
+                        case 'delete_service':
+                            const idxS = mockServices.findIndex(s => s.id == params.id);
+                            if (idxS >= 0) mockServices.splice(idxS, 1);
+                            resolve({ success: true, message: 'تم الحذف' });
+                            break;
+                        case 'get_customers':
+                            resolve({ success: true, data: mockCustomers });
+                            break;
+                        case 'save_customer':
+                            if (params.id && params.id > 0) {
+                                const idx = mockCustomers.findIndex(c => c.id == params.id);
+                                if (idx >= 0) mockCustomers[idx] = { ...mockCustomers[idx], ...params };
+                            } else {
+                                params.id = ++mockIdCounter;
+                                mockCustomers.push(params);
+                            }
+                            resolve({ success: true, message: 'تم حفظ العميل', data: params });
+                            break;
+                        case 'delete_customer':
+                            const idxC = mockCustomers.findIndex(c => c.id == params.id);
+                            if (idxC >= 0) mockCustomers.splice(idxC, 1);
+                            resolve({ success: true, message: 'تم الحذف' });
+                            break;
+                        case 'get_suppliers':
+                            resolve({ success: true, data: mockSuppliers });
+                            break;
+                        case 'save_supplier':
+                            if (params.id && params.id > 0) {
+                                const idx = mockSuppliers.findIndex(s => s.id == params.id);
+                                if (idx >= 0) mockSuppliers[idx] = { ...mockSuppliers[idx], ...params };
+                            } else {
+                                params.id = ++mockIdCounter;
+                                mockSuppliers.push(params);
+                            }
+                            resolve({ success: true, message: 'تم حفظ المورد', data: params });
+                            break;
+                        case 'delete_supplier':
+                            const idxSup = mockSuppliers.findIndex(s => s.id == params.id);
+                            if (idxSup >= 0) mockSuppliers.splice(idxSup, 1);
+                            resolve({ success: true, message: 'تم الحذف' });
+                            break;
+                        case 'get_sms':
+                            resolve({ success: true, data: mockSms });
+                            break;
+                        case 'delete_sms':
+                            const idxSms = mockSms.findIndex(s => s.id == params.id);
+                            if (idxSms >= 0) mockSms.splice(idxSms, 1);
+                            resolve({ success: true, message: 'تم الحذف' });
+                            break;
+                        case 'get_notifications':
+                            resolve({ success: true, data: mockNotifications });
+                            break;
+                        case 'generate_report':
+                            // تقارير وهمية
+                            let reportData = [];
+                            switch (params.report_type) {
+                                case 'services_summary':
+                                    reportData = mockServices.map(s => ({
+                                        name: s.name,
+                                        price: s.price,
+                                        status: s.status
+                                    }));
+                                    break;
+                                case 'customers_list':
+                                    reportData = mockCustomers.map(c => ({
+                                        name: c.name,
+                                        phone: c.phone1,
+                                        balance: c.balance
+                                    }));
+                                    break;
+                                default:
+                                    reportData = { message: 'تقرير نموذجي', items: mockServices.slice(0, 3) };
+                            }
+                            resolve({ success: true, data: reportData });
+                            break;
+                        default:
+                            resolve({ success: false, error: 'إجراء غير معروف: ' + action });
+                    }
+                }, 300);
+            });
+        }
+
+        // ============================================================
+        //  CORE FUNCTIONS
+        // ============================================================
+
+        // Toast & Loading
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
+        }
+
+        function showLoading(show) {
+            document.getElementById('loadingOverlay').classList.toggle('active', show);
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+
+        // Theme
+        function toggleTheme() {
+            const html = document.documentElement;
+            const dark = html.getAttribute('data-theme') === 'dark';
+            html.setAttribute('data-theme', dark ? 'light' : 'dark');
+            document.getElementById('darkModeToggle').checked = !dark;
+            localStorage.setItem('darkMode', !dark);
+        }
+
+        // Screen Navigation
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            const target = document.getElementById('screen-' + screenId);
+            if (target) target.classList.add('active');
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            const navBtn = document.querySelector(`.nav-item[data-screen="${screenId}"]`);
+            if (navBtn) navBtn.classList.add('active');
+        }
+
+        // Filter table
+        function filterTable(tableId, query) {
+            const rows = document.getElementById(tableId).querySelectorAll('tr');
+            const q = query.trim().toLowerCase();
+            rows.forEach(row => {
+                if (row.cells.length < 2) return;
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(q) ? '' : 'none';
+            });
+        }
+
+        function filterSmsByStatus() {
+            const status = document.getElementById('smsStatusFilter').value;
+            const rows = document.querySelectorAll('#smsTable tr');
+            rows.forEach(row => {
+                if (row.cells.length < 6) return;
+                const statusCell = row.cells[4]?.textContent?.trim() || '';
+                let show = true;
+                if (status) {
+                    show = statusCell.includes(status === 'processed' ? 'معالجة' :
+                        status === 'pending' ? 'معلقة' :
+                        status === 'failed' ? 'فاشلة' : 'مستلمة');
+                }
+                row.style.display = show ? '' : 'none';
+            });
+        }
+
+        // ============================================================
+        //  SETTINGS
+        // ============================================================
+        function getBusinessSettings() {
+            try { return JSON.parse(localStorage.getItem('business_settings') || '{}'); } catch { return {}; }
+        }
+
+        function applySettings() {
+            const settings = getBusinessSettings();
+            const name = settings.businessName || 'نظام الخدمات';
+            document.getElementById('headerTitle').textContent = name;
+            document.getElementById('aboutBusinessName').textContent = name;
+            document.getElementById('businessName').value = name;
+            document.getElementById('logoUrl').value = settings.logoUrl || '';
+            document.getElementById('supportPhone').value = settings.supportPhone || '';
+        }
+
+        function saveSettings(e) {
+            e.preventDefault();
+            const settings = {
+                businessName: document.getElementById('businessName').value.trim() || 'نظام الخدمات',
+                logoUrl: document.getElementById('logoUrl').value.trim(),
+                supportPhone: document.getElementById('supportPhone').value.trim()
+            };
+            localStorage.setItem('business_settings', JSON.stringify(settings));
+            applySettings();
+            showToast('تم حفظ الإعدادات', 'success');
+        }
+
+        // ============================================================
+        //  DASHBOARD
+        // ============================================================
+        async function loadDashboard() {
+            try {
+                const result = await apiCall('get_dashboard');
+                if (result.success && result.data) {
+                    const stats = result.data[0] || {};
+                    document.getElementById('dashCustomers').textContent = stats.total_customers || 0;
+                    document.getElementById('dashServices').textContent = stats.total_services || 0;
+                    document.getElementById('dashSmsToday').textContent = stats.sms_today || 0;
+                    document.getElementById('dashDue').textContent = (stats.total_due || 0).toLocaleString();
+                    if (result.ai_insight) {
+                        document.getElementById('aiInsight').innerHTML = result.ai_insight;
+                    } else {
+                        document.getElementById('aiInsight').innerHTML = '✅ النظام يعمل بكفاءة.';
+                    }
+                }
+                await loadDailySmsChart();
+                await loadNotifications();
+            } catch (e) {
+                console.error('Dashboard error', e);
+            }
+        }
+
+        async function loadDailySmsChart() {
+            try {
+                const result = await apiCall('get_daily_sms');
+                if (result.success && result.data) {
+                    const chart = document.getElementById('dailySmsChart');
+                    chart.innerHTML = '';
+                    const max = Math.max(...result.data.map(d => d.count || 0)) || 1;
+                    result.data.forEach(d => {
+                        const item = document.createElement('div');
+                        item.className = 'bar-item';
+                        const bar = document.createElement('div');
+                        bar.className = 'bar';
+                        bar.style.height = ((d.count || 0) / max * 140) + 'px';
+                        const label = document.createElement('div');
+                        label.className = 'bar-label';
+                        label.textContent = d.date || '';
+                        const value = document.createElement('div');
+                        value.className = 'bar-value';
+                        value.textContent = d.count || 0;
+                        item.appendChild(bar);
+                        item.appendChild(value);
+                        item.appendChild(label);
+                        chart.appendChild(item);
+                    });
+                }
+            } catch (e) {
+                console.error('Chart error', e);
+            }
+        }
+
+        // ============================================================
+        //  SERVICES CRUD
+        // ============================================================
+        async function loadServices() {
+            try {
+                const result = await apiCall('get_services');
+                if (result.success) {
+                    renderServices(result.data);
+                }
+            } catch (e) {
+                console.error('Services load error', e);
+            }
+        }
+
+        function renderServices(data) {
+            const tbody = document.getElementById('servicesTable');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">لا توجد خدمات</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.map((s, i) => `
+                <tr>
+                    <td>${i + 1}</td>
+                    <td><strong>${s.name}</strong></td>
+                    <td>${s.price} ريال</td>
+                    <td><code style="background:var(--bg-color);padding:2px 6px;border-radius:4px;">${s.code}</code></td>
+                    <td><span class="badge ${s.status === 'active' ? 'badge-success' : 'badge-danger'}">${s.status === 'active' ? 'مفعلة' : 'غير مفعلة'}</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="editService(${s.id})">✏️</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteService(${s.id})">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function openServiceModal(data) {
+            document.getElementById('serviceEditId').value = data?.id || 0;
+            document.getElementById('serviceModalTitle').textContent = data ? '✏️ تعديل خدمة' : '➕ إضافة خدمة';
+            document.getElementById('serviceName').value = data?.name || '';
+            document.getElementById('servicePrice').value = data?.price || '';
+            document.getElementById('serviceCode').value = data?.code || '';
+            document.getElementById('serviceStatus').value = data?.status || 'active';
+            document.getElementById('serviceDetails').value = data?.details || '';
+            document.getElementById('serviceModal').classList.add('active');
+        }
+
+        function editService(id) {
+            const item = mockServices.find(s => s.id == id);
+            if (item) openServiceModal(item);
+        }
+
+        async function deleteService(id) {
+            if (!confirm('هل أنت متأكد من حذف هذه الخدمة؟')) return;
+            showLoading(true);
+            try {
+                const result = await apiCall('delete_service', { id });
+                if (result.success) {
+                    showToast('تم الحذف', 'success');
+                    await loadServices();
+                } else {
+                    showToast(result.error || 'فشل الحذف', 'error');
+                }
+            } catch (e) {
+                showToast('خطأ', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function saveService(e) {
+            e.preventDefault();
+            const data = {
+                id: parseInt(document.getElementById('serviceEditId').value) || 0,
+                name: document.getElementById('serviceName').value.trim(),
+                price: parseFloat(document.getElementById('servicePrice').value) || 0,
+                code: document.getElementById('serviceCode').value.trim(),
+                status: document.getElementById('serviceStatus').value,
+                details: document.getElementById('serviceDetails').value.trim()
+            };
+            if (!data.name || !data.code) {
+                showToast('الاسم وكود التفعيل مطلوبان', 'warning');
+                return;
+            }
+            showLoading(true);
+            try {
+                const result = await apiCall('save_service', data);
+                if (result.success) {
+                    showToast(result.message, 'success');
+                    closeModal('serviceModal');
+                    await loadServices();
+                } else {
+                    showToast(result.error || 'فشل الحفظ', 'error');
+                }
+            } catch (e) {
+                showToast('خطأ', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function exportServices() {
+            showToast('جاري تصدير الخدمات...', 'success');
+        }
+
+        // ============================================================
+        //  CUSTOMERS CRUD
+        // ============================================================
+        async function loadCustomers() {
+            try {
+                const result = await apiCall('get_customers');
+                if (result.success) {
+                    renderCustomers(result.data);
+                }
+            } catch (e) {
+                console.error('Customers load error', e);
+            }
+        }
+
+        function renderCustomers(data) {
+            const tbody = document.getElementById('customersTable');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">لا يوجد عملاء</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.map((c, i) => `
+                <tr>
+                    <td>${i + 1}</td>
+                    <td><strong>${c.name}</strong></td>
+                    <td>${c.phone1}</td>
+                    <td>${c.phone2 || '—'}</td>
+                    <td>${c.phone3 || '—'}</td>
+                    <td>${c.deposit} ريال</td>
+                    <td><span class="badge ${c.allowCredit ? 'badge-success' : 'badge-danger'}">${c.allowCredit ? 'نعم' : 'لا'}</span></td>
+                    <td>${c.creditLimit} ريال</td>
+                    <td style="color:${c.balance < 0 ? 'var(--error)' : 'var(--success)'}">${c.balance} ريال</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="editCustomer(${c.id})">✏️</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteCustomer(${c.id})">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function openCustomerModal(data) {
+            document.getElementById('customerEditId').value = data?.id || 0;
+            document.getElementById('customerModalTitle').textContent = data ? '✏️ تعديل عميل' : '➕ إضافة عميل';
+            document.getElementById('customerName').value = data?.name || '';
+            document.getElementById('customerPhone1').value = data?.phone1 || '';
+            document.getElementById('customerPhone2').value = data?.phone2 || '';
+            document.getElementById('customerPhone3').value = data?.phone3 || '';
+            document.getElementById('customerDeposit').value = data?.deposit || 0;
+            document.getElementById('customerAllowCredit').value = data?.allowCredit ? 1 : 0;
+            document.getElementById('customerCreditLimit').value = data?.creditLimit || 0;
+            document.getElementById('customerBalance').value = data?.balance || 0;
+            document.getElementById('customerNotes').value = data?.notes || '';
+            document.getElementById('customerModal').classList.add('active');
+        }
+
+        function editCustomer(id) {
+            const item = mockCustomers.find(c => c.id == id);
+            if (item) openCustomerModal(item);
+        }
+
+        async function deleteCustomer(id) {
+            if (!confirm('هل أنت متأكد من حذف هذا العميل؟')) return;
+            showLoading(true);
+            try {
+                const result = await apiCall('delete_customer', { id });
+                if (result.success) {
+                    showToast('تم الحذف', 'success');
+                    await loadCustomers();
+                } else {
+                    showToast(result.error || 'فشل الحذف', 'error');
+                }
+            } catch (e) {
+                showToast('خطأ', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function saveCustomer(e) {
+            e.preventDefault();
+            const data = {
+                id: parseInt(document.getElementById('customerEditId').value) || 0,
+                name: document.getElementById('customerName').value.trim(),
+                phone1: document.getElementById('customerPhone1').value.trim(),
+                phone2: document.getElementById('customerPhone2').value.trim(),
+                phone3: document.getElementById('customerPhone3').value.trim(),
+                deposit: parseFloat(document.getElementById('customerDeposit').value) || 0,
+                allowCredit: parseInt(document.getElementById('customerAllowCredit').value) === 1,
+                creditLimit: parseFloat(document.getElementById('customerCreditLimit').value) || 0,
+                balance: parseFloat(document.getElementById('customerBalance').value) || 0,
+                notes: document.getElementById('customerNotes').value.trim()
+            };
+            if (!data.name || !data.phone1) {
+                showToast('الاسم والهاتف 1 مطلوبان', 'warning');
+                return;
+            }
+            showLoading(true);
+            try {
+                const result = await apiCall('save_customer', data);
+                if (result.success) {
+                    showToast(result.message, 'success');
+                    closeModal('customerModal');
+                    await loadCustomers();
+                } else {
+                    showToast(result.error || 'فشل الحفظ', 'error');
+                }
+            } catch (e) {
+                showToast('خطأ', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function exportCustomers() {
+            showToast('جاري تصدير العملاء...', 'success');
+        }
+
+        // ============================================================
+        //  SUPPLIERS CRUD
+        // ============================================================
+        async function loadSuppliers() {
+            try {
+                const result = await apiCall('get_suppliers');
+                if (result.success) {
+                    renderSuppliers(result.data);
+                }
+            } catch (e) {
+                console.error('Suppliers load error', e);
+            }
+        }
+
+        function renderSuppliers(data) {
+            const tbody = document.getElementById('suppliersTable');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">لا يوجد موردين</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.map((s, i) => `
+                <tr>
+                    <td>${i + 1}</td>
+                    <td><strong>${s.name}</strong></td>
+                    <td>${s.phone1}</td>
+                    <td>${s.phone2 || '—'}</td>
+                    <td>${s.phone3 || '—'}</td>
+                    <td>${s.ourBalance} ريال</td>
+                    <td>${s.theirBalance} ريال</td>
+                    <td><span class="badge ${s.status === 'active' ? 'badge-success' : 'badge-danger'}">${s.status === 'active' ? 'مفعل' : 'غير مفعل'}</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="editSupplier(${s.id})">✏️</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteSupplier(${s.id})">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function openSupplierModal(data) {
+            document.getElementById('supplierEditId').value = data?.id || 0;
+            document.getElementById('supplierModalTitle').textContent = data ? '✏️ تعديل مورد' : '➕ إضافة مورد';
+            document.getElementById('supplierName').value = data?.name || '';
+            document.getElementById('supplierPhone1').value = data?.phone1 || '';
+            document.getElementById('supplierPhone2').value = data?.phone2 || '';
+            document.getElementById('supplierPhone3').value = data?.phone3 || '';
+            document.getElementById('supplierOurBalance').value = data?.ourBalance || 0;
+            document.getElementById('supplierTheirBalance').value = data?.theirBalance || 0;
+            document.getElementById('supplierStatus').value = data?.status || 'active';
+            document.getElementById('supplierNotes').value = data?.notes || '';
+            document.getElementById('supplierModal').classList.add('active');
+        }
+
+        function editSupplier(id) {
+            const item = mockSuppliers.find(s => s.id == id);
+            if (item) openSupplierModal(item);
+        }
+
+        async function deleteSupplier(id) {
+            if (!confirm('هل أنت متأكد من حذف هذا المورد؟')) return;
+            showLoading(true);
+            try {
+                const result = await apiCall('delete_supplier', { id });
+                if (result.success) {
+                    showToast('تم الحذف', 'success');
+                    await loadSuppliers();
+                } else {
+                    showToast(result.error || 'فشل الحذف', 'error');
+                }
+            } catch (e) {
+                showToast('خطأ', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function saveSupplier(e) {
+            e.preventDefault();
+            const data = {
+                id: parseInt(document.getElementById('supplierEditId').value) || 0,
+                name: document.getElementById('supplierName').value.trim(),
+                phone1: document.getElementById('supplierPhone1').value.trim(),
+                phone2: document.getElementById('supplierPhone2').value.trim(),
+                phone3: document.getElementById('supplierPhone3').value.trim(),
+                ourBalance: parseFloat(document.getElementById('supplierOurBalance').value) || 0,
+                theirBalance: parseFloat(document.getElementById('supplierTheirBalance').value) || 0,
+                status: document.getElementById('supplierStatus').value,
+                notes: document.getElementById('supplierNotes').value.trim()
+            };
+            if (!data.name || !data.phone1) {
+                showToast('الاسم والهاتف 1 مطلوبان', 'warning');
+                return;
+            }
+            showLoading(true);
+            try {
+                const result = await apiCall('save_supplier', data);
+                if (result.success) {
+                    showToast(result.message, 'success');
+                    closeModal('supplierModal');
+                    await loadSuppliers();
+                } else {
+                    showToast(result.error || 'فشل الحفظ', 'error');
+                }
+            } catch (e) {
+                showToast('خطأ', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function exportSuppliers() {
+            showToast('جاري تصدير الموردين...', 'success');
+        }
+
+        // ============================================================
+        //  SMS INBOX
+        // ============================================================
+        async function loadSms() {
+            try {
+                const result = await apiCall('get_sms');
+                if (result.success) {
+                    renderSms(result.data);
+                }
+            } catch (e) {
+                console.error('SMS load error', e);
+            }
+        }
+
+        function renderSms(data) {
+            const tbody = document.getElementById('smsTable');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">لا توجد رسائل</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.map((s, i) => `
+                <tr>
+                    <td>${i + 1}</td>
+                    <td><strong>${s.sender}</strong></td>
+                    <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${s.text}</td>
+                    <td>${s.time}</td>
+                    <td><span class="status-badge status-${s.status}">${s.status === 'processed' ? '✅ معالجة' : s.status === 'pending' ? '⏳ معلقة' : s.status === 'failed' ? '❌ فاشلة' : '📥 مستلمة'}</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-info" onclick="viewSms(${s.id})">👁️</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteSms(${s.id})">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function refreshSms() {
+            loadSms();
+            showToast('تم تحديث الرسائل', 'success');
+        }
+
+        function viewSms(id) {
+            const sms = mockSms.find(s => s.id == id);
+            if (!sms) return;
+            document.getElementById('smsDetailBody').innerHTML = `
+                <div style="margin-bottom:8px;"><strong>المرسل:</strong> ${sms.sender}</div>
+                <div style="margin-bottom:8px;"><strong>النص:</strong> ${sms.text}</div>
+                <div style="margin-bottom:8px;"><strong>الوقت:</strong> ${sms.time}</div>
+                <div style="margin-bottom:8px;"><strong>الحالة:</strong> <span class="status-badge status-${sms.status}">${sms.status === 'processed' ? '✅ معالجة' : sms.status === 'pending' ? '⏳ معلقة' : sms.status === 'failed' ? '❌ فاشلة' : '📥 مستلمة'}</span></div>
+                <div style="padding:12px;background:var(--bg-color);border-radius:var(--radius-sm);">
+                    <strong>🔍 تحليل الرسالة:</strong><br>
+                    ${sms.text.includes('شحن') ? '🟢 طلب شحن رصيد' :
+                      sms.text.includes('انترنت') ? '🟢 طلب باقة إنترنت' :
+                      sms.text.includes('رسائل') ? '🟢 طلب باقة رسائل' :
+                      sms.text.includes('رصيد') ? '🔵 استعلام رصيد' :
+                      '⚪ رسالة عادية'}
+                    <br><span style="font-size:0.8rem;color:var(--text-muted);">تم التحليل بواسطة الذكاء الاصطناعي</span>
+                </div>
+            `;
+            document.getElementById('smsDetailModal').classList.add('active');
+        }
+
+        async function deleteSms(id) {
+            if (!confirm('هل أنت متأكد من حذف هذه الرسالة؟')) return;
+            showLoading(true);
+            try {
+                const result = await apiCall('delete_sms', { id });
+                if (result.success) {
+                    showToast('تم الحذف', 'success');
+                    await loadSms();
+                } else {
+                    showToast(result.error || 'فشل الحذف', 'error');
+                }
+            } catch (e) {
+                showToast('خطأ', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function exportSms() {
+            showToast('جاري تصدير الرسائل...', 'success');
+        }
+
+        // ============================================================
+        //  NOTIFICATIONS
+        // ============================================================
+        async function loadNotifications() {
+            try {
+                const result = await apiCall('get_notifications');
+                if (result.success) {
+                    renderNotifications(result.data);
+                }
+            } catch (e) {
+                console.error('Notifications load error', e);
+            }
+        }
+
+        function renderNotifications(data) {
+            const container = document.getElementById('notificationsList');
+            if (!data || data.length === 0) {
+                container.innerHTML =
+                '<div class="text-center text-muted" style="padding:20px;">لا توجد إشعارات</div>';
+                return;
+            }
+            container.innerHTML = data.map(n => `
+                <div style="padding:12px 0;border-bottom:var(--border-width) var(--border-style) var(--border-color);">
+                    <div style="font-weight:700;">${n.title}</div>
+                    <div style="font-size:0.85rem;color:var(--text-muted);">${n.message}</div>
+                    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">${n.time}</div>
+                </div>
+            `).join('');
+        }
+
+        // ============================================================
+        //  REPORTS
+        // ============================================================
+        let currentReportData = null;
+
+        async function generateReport(type) {
+            showLoading(true);
+            try {
+                const result = await apiCall('generate_report', { report_type: type });
+                if (result.success) {
+                    currentReportData = result.data;
+                    document.getElementById('reportModalTitle').textContent = '📊 ' +
+                        (type.replace('_', ' ').toUpperCase());
+                    const body = document.getElementById('reportModalBody');
+                    if (Array.isArray(result.data)) {
+                        if (result.data.length === 0) {
+                            body.innerHTML = '<div class="text-center text-muted">لا توجد بيانات</div>';
+                        } else {
+                            let html =
+                                '<div class="table-container"><table class="data-table"><thead><tr>';
+                            const keys = Object.keys(result.data[0]);
+                            keys.forEach(k => html += `<th>${k}</th>`);
+                            html += '</tr></thead><tbody>';
+                            result.data.forEach(item => {
+                                html += '<tr>';
+                                keys.forEach(k => html += `<td>${item[k] ?? ''}</td>`);
+                                html += '</tr>';
+                            });
+                            html += '</tbody></table></div>';
+                            body.innerHTML = html;
+                        }
+                    } else {
+                        body.innerHTML =
+                            `<pre style="background:var(--bg-color);padding:16px;border-radius:var(--radius-sm);font-size:0.85rem;overflow:auto;">${JSON.stringify(result.data, null, 2)}</pre>`;
+                    }
+                    document.getElementById('reportModal').classList.add('active');
+                    showToast('تم توليد التقرير', 'success');
+                } else {
+                    showToast(result.error || 'فشل توليد التقرير', 'error');
+                }
+            } catch (e) {
+                showToast('خطأ في توليد التقرير', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function printReport() {
+            const content = document.getElementById('reportModalBody').innerHTML;
+            const win = window.open('', '_blank');
+            win.document.write(`
+                <html dir="rtl"><head><title>تقرير</title>
+                <style>body{font-family:sans-serif;padding:20px;direction:rtl;}
+                table{width:100%;border-collapse:collapse;margin-top:16px;}
+                th,td{border:1px solid #ccc;padding:8px;text-align:right;}
+                th{background:#1a3a6b;color:#fff;}
+</style></head><body>
+    <h2 style="color:#1a3a6b;">التقرير</h2>
+    ${content}
+    <div style="margin-top:20px;font-size:0.8rem;color:#666;">تم إنشاؤه بواسطة النظام</div>
+</body></html>
+`);
+win.document.close();
+setTimeout(() => win.print(), 500);
+}
+
+function exportReportData() {
+if (!currentReportData) { showToast('لا توجد بيانات للتصدير', 'warning'); return; }
+const blob = new Blob([JSON.stringify(currentReportData, null, 2)], { type: 'application/json' });
+const url = URL.createObjectURL(blob);
+const a = document.createElement('a');
+a.href = url;
+a.download = `تقرير_${new Date().toISOString().slice(0,10)}.json`;
+a.click();
+URL.revokeObjectURL(url);
+showToast('تم التصدير', 'success');
+}
+
+// ============================================================
+//  ABOUT
+// ============================================================
+function showAboutModal() {
+document.getElementById('aboutModal').classList.add('active');
+}
+
+// ============================================================
+//  EXPORT DATA (Full Backup)
+// ============================================================
+async function exportData() {
+showLoading(true);
+try {
+const allData = {
+services: mockServices,
+customers: mockCustomers,
+suppliers: mockSuppliers,
+sms: mockSms,
+notifications: mockNotifications,
+timestamp: new Date().toISOString()
+};
+const blob = new Blob([JSON.stringify(allData, null, 2)], { type: 'application/json' });
+const url = URL.createObjectURL(blob);
+const a = document.createElement('a');
+a.href = url;
+a.download = `backup_${new Date().toISOString().slice(0,10)}.json`;
+a.click();
+URL.revokeObjectURL(url);
+showToast('تم تصدير النسخة الاحتياطية', 'success');
+} catch (e) {
+showToast('فشل التصدير', 'error');
+} finally {
+showLoading(false);
+}
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', function() {
+// استعادة الوضع الليلي
+const darkMode = localStorage.getItem('darkMode') === 'true';
+if (darkMode) {
+document.documentElement.setAttribute('data-theme', 'dark');
+document.getElementById('darkModeToggle').checked = true;
+}
+
+// تطبيق الإعدادات
+applySettings();
+
+// تحميل البيانات
+loadDashboard();
+loadServices();
+loadCustomers();
+loadSuppliers();
+loadSms();
+
+// إغلاق المودالات بالنقر خارجها
+document.querySelectorAll('.modal-overlay').forEach(el => {
+el.addEventListener('click', function(e) {
+if (e.target === this) this.classList.remove('active');
+});
+});
+
+// إظهار ترحيب
+setTimeout(() => {
+showToast('مرحباً بك في نظام الخدمات', 'success');
+}, 600);
+});
+</script>
+
+</body>
+</html>

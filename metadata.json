@@ -1,0 +1,8 @@
+{
+  "name": "نظام تفعيل خدمات الاتصالات",
+  "description": "نظام متكامل لإدارة شحن الرصيد، باقات الإنترنت، والرسائل النصية عبر SMS مع دعم الذكاء الاصطناعي وتحليل الرسائل",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

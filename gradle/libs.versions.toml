@@ -1,0 +1,211 @@
+# ═══════════════════════════════════════════════════════════════
+#  نظام تفعيل خدمات الاتصالات - Gradle Version Catalog
+#  الإصدار 3.0 - متوافق مع Android 14
+# ═══════════════════════════════════════════════════════════════
+#
+#  هذا الملف يُستخدم لإدارة جميع الإصدارات والتبعيات في المشروع
+#  بشكل مركزي، مما يسهل عملية التحديث والصيانة.
+#
+#  التحديثات والتحسينات:
+#  1. ترقية جميع الإصدارات إلى أحدث إصدارات مستقرة
+#  2. إضافة تعليقات توثيقية لكل مكتبة
+#  3. تنظيم المكتبات حسب الوظيفة (Core, UI, Network, Database, Security, etc.)
+#  4. إزالة المكتبات غير المستخدمة في المشروع الجديد
+#  5. إضافة مكتبات أساسية مثل Security Crypto و Biometric
+# ═══════════════════════════════════════════════════════════════
+
+[versions]
+# ============================================================
+#  الإصدارات الأساسية - Core Versions
+# ============================================================
+agp = "8.9.0"                          # Android Gradle Plugin
+kotlin = "2.1.0"                       # Kotlin
+googleDevtoolsKsp = "2.1.0-1.0.29"     # Kotlin Symbol Processing
+
+# ============================================================
+#  AndroidX - المكتبات الأساسية
+# ============================================================
+coreKtx = "1.15.0"                     # AndroidX Core KTX
+androidxAppcompat = "1.7.0"            # AppCompat (تم التحديث)
+activityCompose = "1.9.3"              # Activity Compose (للتوافق)
+lifecycleRuntimeKtx = "2.8.7"          # Lifecycle Runtime KTX
+
+# ============================================================
+#  Kotlin Coroutines - البرمجة غير المتزامنة
+# ============================================================
+kotlinxCoroutinesCore = "1.10.1"       # Coroutines Core
+kotlinxCoroutinesAndroid = "1.10.1"    # Coroutines for Android
+
+# ============================================================
+#  Compose UI - واجهة المستخدم (في حالة استخدام Compose)
+# ============================================================
+composeBom = "2025.02.00"              # Compose BOM (تم التحديث)
+navigationCompose = "2.8.5"            # Navigation Compose
+
+# ============================================================
+#  Testing - اختبارات الوحدة والتكامل
+# ============================================================
+junit = "4.13.2"                       # JUnit 4
+junitVersion = "1.2.1"                 # AndroidX JUnit
+espressoCore = "3.6.1"                 # Espresso (اختبارات UI)
+core = "1.6.1"                         # AndroidX Test Core
+runner = "1.6.2"                       # AndroidX Test Runner
+
+# ============================================================
+#  Network - الاتصال بالشبكة والخوادم
+# ============================================================
+retrofit = "2.11.0"                    # Retrofit (تم التحديث)
+okhttp = "4.12.0"                      # OkHttp (تم التحديث)
+loggingInterceptor = "4.12.0"          # OkHttp Logging Interceptor
+moshiKotlin = "1.15.1"                 # Moshi JSON Serialization
+moshiKotlinCodegen = "1.15.1"          # Moshi Codegen
+nanohttpd = "2.3.1"                    # NanoHTTPD (خادم HTTP خفيف)
+okio = "3.9.0"                         # OkIO (مدخلات/مخرجات)
+
+# ============================================================
+#  Database - قواعد البيانات
+# ============================================================
+roomRuntime = "2.7.0"                  # Room Runtime (تم التحديث)
+roomKtx = "2.7.0"                      # Room KTX
+roomCompiler = "2.7.0"                 # Room Compiler
+
+# ============================================================
+#  Security - الأمان والتشفير
+# ============================================================
+securityCrypto = "1.1.0-alpha06"       # EncryptedSharedPreferences
+rootbeer = "0.1.0"                     # Root Detection
+
+# ============================================================
+#  Background Tasks - المهام الخلفية
+# ============================================================
+work = "2.10.0"                        # WorkManager (تم التحديث)
+
+# ============================================================
+#  Firebase - الخدمات السحابية (اختياري)
+# ============================================================
+firebaseBom = "33.7.0"                 # Firebase BOM (في حالة استخدام Firebase)
+
+# ============================================================
+#  Plugins - الإضافات
+# ============================================================
+secretsGradlePlugin = "2.0.1"          # Secrets Gradle Plugin
+
+
+[libraries]
+
+# ============================================================
+#  AndroidX Core - المكتبات الأساسية
+# ============================================================
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "androidxAppcompat" }
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+
+# ============================================================
+#  Lifecycle & ViewModel - دورة الحياة
+# ============================================================
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
+androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycleRuntimeKtx" }
+androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycleRuntimeKtx" }
+
+# ============================================================
+#  Compose UI - فقط في حالة استخدام Compose (UI الحالية تعتمد على WebView)
+# ============================================================
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
+androidx-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
+androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
+androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
+androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+androidx-compose-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core" }
+
+# ============================================================
+#  Navigation - التنقل بين الشاشات (في حالة استخدام Compose)
+# ============================================================
+androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
+
+# ============================================================
+#  Room Database - قاعدة البيانات (في حالة استخدام Room)
+# ============================================================
+androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "roomRuntime" }
+androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "roomKtx" }
+androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "roomCompiler" }
+
+# ============================================================
+#  Kotlin Coroutines - البرمجة غير المتزامنة
+# ============================================================
+kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinxCoroutinesCore" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutinesAndroid" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutinesCore" }
+
+# ============================================================
+#  Network - الاتصال بالشبكة والخوادم
+# ============================================================
+retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
+converter-moshi = { group = "com.squareup.retrofit2", name = "converter-moshi", version.ref = "retrofit" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+logging-interceptor = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "loggingInterceptor" }
+moshi-kotlin = { group = "com.squareup.moshi", name = "moshi-kotlin", version.ref = "moshiKotlin" }
+moshi-kotlin-codegen = { group = "com.squareup.moshi", name = "moshi-kotlin-codegen", version.ref = "moshiKotlinCodegen" }
+nanohttpd = { group = "org.nanohttpd", name = "nanohttpd", version.ref = "nanohttpd" }
+
+# ============================================================
+#  Security - الأمان والتشفير
+# ============================================================
+androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
+rootbeer-lib = { group = "com.scottyab", name = "rootbeer-lib", version.ref = "rootbeer" }
+
+# ============================================================
+#  Background Tasks - المهام الخلفية
+# ============================================================
+androidx-work = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
+
+# ============================================================
+#  Testing - اختبارات الوحدة والتكامل
+# ============================================================
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
+androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
+androidx-core = { group = "androidx.test", name = "core", version.ref = "core" }
+androidx-runner = { group = "androidx.test", name = "runner", version.ref = "runner" }
+
+# ============================================================
+#  Firebase - الخدمات السحابية (اختياري)
+# ============================================================
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
+
+# ============================================================
+#  Miscellaneous - مكتبات متفرقة
+# ============================================================
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+
+
+[plugins]
+
+# ============================================================
+#  Android & Kotlin Plugins - الإضافات الأساسية
+# ============================================================
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+
+# ============================================================
+#  KSP - Kotlin Symbol Processing
+# ============================================================
+google-devtools-ksp = { id = "com.google.devtools.ksp", version.ref = "googleDevtoolsKsp" }
+
+# ============================================================
+#  Secrets - لإدارة المفاتيح السرية (API Keys)
+# ============================================================
+secrets = { id = "com.google.android.libraries.mapsplatform.secrets-gradle-plugin", version.ref = "secretsGradlePlugin" }
+
+# ============================================================
+#  Roborazzi - اختبارات واجهة المستخدم (اختياري)
+# ============================================================
+roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }
+
+
+# ═══════════════════════════════════════════════════════════════
+#  نهاية الملف
+# ═══════════════════════════════════════════════════════════════
