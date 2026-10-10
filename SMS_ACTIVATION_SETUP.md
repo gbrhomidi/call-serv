@@ -60,8 +60,20 @@
 
 ## 7. إصدار APK وتحديث التطبيق المثبت
 
-- سير GitHub Actions يتحقق من واجهة SMS واختبارات Kotlin/Robolectric ويبني Debug للتحقق. في طلبات الدمج إلى `main` لا تُستخدم أسرار التوقيع ولا يُنشَر APK.
-- عند الدفع إلى `main` بعد الدمج، يُبنى Release موقّع وتُرفع حزمة `CallServ_SMS_Activation_Release` مع `SHA256SUMS.txt` إلى تبويب **Actions** (صالح للتنزيل 14 يوماً). فرع الميزة وطلبات الدمج يشغّلان التحقق فقط ولا يحصلان على أسرار التوقيع.
+- سير GitHub Actions يتحقق من واجهة SMS واختبارات Kotlin/Robolectric ويبني Debug. طلبات الدمج تشغّل التحقق فقط ولا ترفع APK.
+- عند الدفع إلى `feat/sms-activation-bank-reconciliation`، تُفحص نسخة Debug الموقّعة ويُرفع artifact باسم `CallServ_SMS_Activation_FreshInstall` مع SHA256 إلى تبويب **Actions** (صالح 14 يوماً). هذا بناء تطوير كامل قابل للتثبيت وموقّع بمفتاح Android debug مؤقت من عامل CI، وليس إصداراً إنتاجياً.
+- عند الدفع إلى `main` بعد الدمج، يُبنى Release إنتاجي موقّع ويُرفع artifact باسم `CallServ_SMS_Activation_Release` مع SHA256. أسرار التوقيع متاحة لهذا المسار فقط.
 - ثُبّت `applicationId` الحالي `com.aistudio.dieselstationsms.kxmpzq`، ورُفع `versionCode` إلى 301 (`versionName` 3.0.1) كي يكون أعلى من خط أساس المشروع السابق (300). الإصدارات التالية يجب أن ترفع `versionCode` مرة أخرى.
-- لكي يحدّث Android التطبيق الموجود بدلاً من طلب إزالة النسخة القديمة، يجب أن يكون APK الجديد **موقّعاً بالمفتاح نفسه** الذي وقّع النسخة المثبتة، وأن يبقى `applicationId` ثابتاً وأن يكون `versionCode` أعلى. بعد تنزيل ملف APK على الهاتف وفتحه، يتولى Android تثبيته كتحديث للتطبيق؛ لا يستطيع GitHub Actions تثبيت APK مباشرة على هاتف غير متصل بمشغل CI.
+- لتحديث النسخة المثبتة دون إزالتها، يجب أن يكون APK موقّعاً بالمفتاح الإنتاجي نفسه، مع بقاء `applicationId` وارتفاع `versionCode`. أما APK الفرع فهي Fresh Install: أزل التطبيق القديم يدوياً أولاً ثم ثبّت الملف الجديد؛ الإزالة تمسح بيانات التطبيق المحلية، كما أن مفتاح debug المؤقت يعني ضرورة الإزالة قبل تثبيت بناء فرع لاحق. لا يستطيع GitHub Actions تنفيذ الإزالة أو التثبيت مباشرة على هاتف المستخدم.
 - يجب إضافة الأسرار التالية في GitHub: **Settings → Secrets and variables → Actions**: `RELEASE_KEYSTORE_BASE64`, `RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`. أدخل فقط بيانات مفتاح التوقيع الإنتاجي المعتمد والمستخدم للنسخة المثبتة؛ لا تضع ملف المفتاح أو كلمات المرور في Git أو رسائل المحادثة. إذا غابت الأسرار يفشل Job الإصدار برسالة واضحة ولا يرفع APK غير موقّع.
+
+### تثبيت بناء الفرع كنسخة جديدة
+
+نزّل `CallServ_SMS_Activation_FreshInstall.apk` من أحدث تشغيل **push** ناجح على فرع `feat/sms-activation-bank-reconciliation`، وانقل الملف إلى الهاتف. أزل التطبيق القديم من إعدادات Android ثم افتح APK وثبّته. أو، بعد توصيل الهاتف وتمكين USB debugging على كمبيوتر به Android Platform Tools، نفّذ:
+
+```sh
+adb uninstall com.aistudio.dieselstationsms.kxmpzq
+adb install CallServ_SMS_Activation_FreshInstall.apk
+```
+
+**تنبيه:** `adb uninstall` يحذف قاعدة البيانات والإعدادات المحلية للتطبيق؛ صدّر أو انسخ بياناتك المهمة قبل التنفيذ. لا تستخدم APK الفرع فوق النسخة الحالية دون الإزالة إذا اختلف مفتاح التوقيع، لأن Android سيرفض التثبيت كتحديث.
