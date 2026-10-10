@@ -189,6 +189,9 @@ class MainActivity : AppCompatActivity() {
         if (!isPermissionGranted(Manifest.permission.SEND_SMS)) {
             permissions.add(Manifest.permission.SEND_SMS)
         }
+        if (!isPermissionGranted(Manifest.permission.CALL_PHONE)) {
+            permissions.add(Manifest.permission.CALL_PHONE)
+        }
         if (!isPermissionGranted(Manifest.permission.RECEIVE_SMS)) {
             permissions.add(Manifest.permission.RECEIVE_SMS)
         }
@@ -590,6 +593,35 @@ class MainActivity : AppCompatActivity() {
                 )
             }
             return "requested"
+        }
+
+        @JavascriptInterface
+        fun getPersistentSetting(key: String): String {
+            val allowed = setOf("system_bank_name", "system_bank_account_name", "system_bank_sender_phone", "system_bank_expected_balance", "activation_provider_phone", "activation_provider_balance", "supplier_balance_query_sms")
+            if (key !in allowed) return ""
+            return try { DatabaseHelper.getInstance(context).getSetting(key) } catch (_: Exception) { "" }
+        }
+
+        @JavascriptInterface
+        fun setPersistentSetting(key: String, value: String): Boolean {
+            val allowed = setOf("system_bank_name", "system_bank_account_name", "system_bank_sender_phone", "system_bank_expected_balance", "activation_provider_phone", "activation_provider_balance", "supplier_balance_query_sms")
+            if (key !in allowed || value.length > 200) return false
+            return try { DatabaseHelper.getInstance(context).setSetting(key, value.trim()) } catch (_: Exception) { false }
+        }
+
+        @JavascriptInterface
+        fun getSmsServiceCatalog(): String {
+            return try { DatabaseHelper.getInstance(context).getServices(status = "active").toString() } catch (_: Exception) { "[]" }
+        }
+
+        @JavascriptInterface
+        fun setServiceActivationTemplate(serviceCode: String, command: String): Boolean {
+            if (serviceCode.length > 40 || command.length > 200 || !command.contains(Regex("(?i)\\(\\s*phone\\s*\\)|\\{\\{?\\s*phone\\s*}?\\}|%phone%|\\bphone\\b"))) return false
+            return try {
+                val db = DatabaseHelper.getInstance(context)
+                db.getServiceByCode(serviceCode) ?: return false
+                db.setActivationCommand(serviceCode, command.trim())
+            } catch (_: Exception) { false }
         }
 
         @JavascriptInterface

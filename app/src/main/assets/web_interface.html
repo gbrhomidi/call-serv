@@ -1335,6 +1335,46 @@
                         <label>هاتف الدعم</label>
                         <input type="tel" class="form-control" id="supportPhone" placeholder="+967 777 000 000">
                     </div>
+                    <hr>
+                    <h3>إعدادات تفعيل الخدمات عبر SMS</h3>
+                    <div class="form-group">
+                        <label>اسم البنك كما يظهر في رسالة البنك</label>
+                        <input type="text" class="form-control" id="systemBankName" placeholder="مثال: الشرعي">
+                    </div>
+                    <div class="form-group">
+                        <label>اسم حساب النظام لدى البنك</label>
+                        <input type="text" class="form-control" id="systemBankAccountName" placeholder="اسم المستفيد">
+                    </div>
+                    <div class="form-group">
+                        <label>رقم مرسل رسائل البنك الموثوق</label>
+                        <input type="tel" class="form-control" id="systemBankSenderPhone" placeholder="رقم مرسل SMS للبنك">
+                    </div>
+                    <div class="form-group">
+                        <label>رصيد حساب النظام الحالي لدى البنك (قبل أول تحويل)</label>
+                        <input type="number" min="0" step="0.01" class="form-control" id="systemBankExpectedBalance" placeholder="أدخله بدقة كما في رسالة البنك">
+                    </div>
+                    <div class="form-group">
+                        <label>رقم هاتف المورد الذي يرسل نتيجة USSD ورصيد المورد</label>
+                        <input type="tel" class="form-control" id="activationProviderPhone" placeholder="رقم المورد الموثوق">
+                    </div>
+                    <div class="form-group">
+                        <label>رصيد المورد الحالي قبل أي محاولة تفعيل</label>
+                        <input type="number" min="0" step="0.01" class="form-control" id="activationProviderBalance" placeholder="مطلوب للسماح بإعادة محاولة آمنة">
+                    </div>
+                    <div class="form-group">
+                        <label>نص SMS للاستعلام عن رصيد المورد</label>
+                        <textarea class="form-control" id="supplierBalanceQuery" rows="2" placeholder="رسالة المورد للاستعلام عن رصيد النظام"></textarea>
+                    </div>
+                    <p class="text-muted">لن تُقبل أي حوالة آلياً دون تطابق رقم البنك والمبلغ واسم العميل ورصيد البنك المتوقع. ولن يُعاد أمر USSD إلا مرة واحدة بعد رد موثوق يثبت أن رصيد المورد لم يتغير.</p>
+                    <div class="form-group">
+                        <label>الخدمة المراد ضبط أمرها الكامل</label>
+                        <select class="form-control" id="smsServiceSelect" onchange="loadSelectedSmsCommand()"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>أمر USSD الكامل (اكتب phone مكان رقم العميل، مثال: 300#*(phone)*130*)</label>
+                        <textarea class="form-control" id="fullActivationCommand" rows="2" dir="ltr" placeholder="300#*(phone)*130*"></textarea>
+                    </div>
+                    <button type="button" class="btn btn-secondary mt-1" onclick="saveSelectedSmsCommand()">حفظ أمر الخدمة</button>
                     <div class="form-group">
                         <label>الحد الأدنى للتنبيه (لتر)</label>
                         <input type="number" class="form-control" id="thresholdInput" value="1000">
@@ -1897,6 +1937,60 @@
             try { return JSON.parse(localStorage.getItem('business_settings') || '{}'); } catch { return {}; }
         }
 
+        const persistentSmsSettings = {
+            systemBankName: 'system_bank_name',
+            systemBankAccountName: 'system_bank_account_name',
+            systemBankSenderPhone: 'system_bank_sender_phone',
+            systemBankExpectedBalance: 'system_bank_expected_balance',
+            activationProviderPhone: 'activation_provider_phone',
+            activationProviderBalance: 'activation_provider_balance',
+            supplierBalanceQuery: 'supplier_balance_query_sms'
+        };
+
+        let smsServiceCatalog = [];
+        function applyPersistentSmsSettings() {
+            if (!window.AndroidInterface || !window.AndroidInterface.getPersistentSetting) return;
+            Object.entries(persistentSmsSettings).forEach(([elementId, key]) => {
+                const element = document.getElementById(elementId);
+                if (element) element.value = window.AndroidInterface.getPersistentSetting(key) || '';
+            });
+            loadSmsServiceCatalog();
+        }
+
+        function loadSmsServiceCatalog() {
+            if (!window.AndroidInterface || !window.AndroidInterface.getSmsServiceCatalog) return;
+            try {
+                smsServiceCatalog = JSON.parse(window.AndroidInterface.getSmsServiceCatalog() || '[]');
+                const select = document.getElementById('smsServiceSelect');
+                if (!select) return;
+                const previous = select.value;
+                select.innerHTML = smsServiceCatalog.map(s => `<option value="${String(s.service_code || '').replace(/"/g, '&quot;')}">${String(s.service_name_ar || s.service_name || s.service_code)} — ${String(s.service_code || '')}</option>`).join('');
+                if (previous) select.value = previous;
+                loadSelectedSmsCommand();
+            } catch (e) { console.warn('تعذر تحميل خدمات SMS', e); }
+        }
+
+        function loadSelectedSmsCommand() {
+            const select = document.getElementById('smsServiceSelect');
+            const input = document.getElementById('fullActivationCommand');
+            const item = smsServiceCatalog.find(s => s.service_code === select?.value);
+            if (input) input.value = item?.activation_command || '';
+        }
+
+        function saveSelectedSmsCommand() {
+            const select = document.getElementById('smsServiceSelect');
+            const command = document.getElementById('fullActivationCommand')?.value.trim() || '';
+            if (!window.AndroidInterface || !window.AndroidInterface.setServiceActivationTemplate) {
+                showToast('حفظ أوامر الخدمات يتطلب تشغيل التطبيق على Android', 'warning'); return;
+            }
+            if (!select?.value || !/\(\s*phone\s*\)|\{\{?\s*phone\s*}?\}|%phone%|\bphone\b/i.test(command)) {
+                showToast('يجب أن يتضمن الأمر الكامل موضع phone لاستبداله برقم العميل', 'warning'); return;
+            }
+            if (window.AndroidInterface.setServiceActivationTemplate(select.value, command)) {
+                showToast('تم حفظ أمر التفعيل الكامل', 'success'); loadSmsServiceCatalog();
+            } else showToast('تعذر حفظ الأمر؛ تحقق من صيغته', 'error');
+        }
+
         function applySettings() {
             const settings = getBusinessSettings();
             const name = settings.businessName || 'نظام الخدمات';
@@ -1905,9 +1999,10 @@
             document.getElementById('businessName').value = name;
             document.getElementById('logoUrl').value = settings.logoUrl || '';
             document.getElementById('supportPhone').value = settings.supportPhone || '';
+            applyPersistentSmsSettings();
         }
 
-        function saveSettings(e) {
+        async function saveSettings(e) {
             e.preventDefault();
             const settings = {
                 businessName: document.getElementById('businessName').value.trim() || 'نظام الخدمات',
@@ -1915,8 +2010,15 @@
                 supportPhone: document.getElementById('supportPhone').value.trim()
             };
             localStorage.setItem('business_settings', JSON.stringify(settings));
+            let persistentSaveFailed = false;
+            if (window.AndroidInterface && window.AndroidInterface.setPersistentSetting) {
+                for (const [elementId, key] of Object.entries(persistentSmsSettings)) {
+                    const element = document.getElementById(elementId);
+                    if (element && !window.AndroidInterface.setPersistentSetting(key, element.value.trim())) persistentSaveFailed = true;
+                }
+            }
             applySettings();
-            showToast('تم حفظ الإعدادات', 'success');
+            showToast(persistentSaveFailed ? 'تعذر حفظ بعض إعدادات SMS' : 'تم حفظ الإعدادات', persistentSaveFailed ? 'warning' : 'success');
         }
 
         // ============================================================

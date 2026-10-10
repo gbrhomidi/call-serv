@@ -246,15 +246,24 @@ class SMSService : Service() {
                                 responseJson.put("success", false)
                                 responseJson.put("error", "الكمية غير متوفرة")
                             } else {
-                                db.updateRefillQty(refillId, qty, operator)
-                                val tid = db.insertTransaction(
-                                    customerId, refillId, qty, price, paid, due,
-                                    "cash", dueDate, paymentType, operator
-                                )
-                                responseJson.put("success", true)
-                                responseJson.put("transaction_id", tid)
-                                responseJson.put("invoice_number", db.getTransactionById(tid)?.getString("invoice_number"))
-                                responseJson.put("message", "تم البيع بنجاح")
+                                if (!db.updateRefillQty(refillId, qty, operator)) {
+                                    responseJson.put("success", false)
+                                    responseJson.put("error", "تعذر تحديث المخزون؛ لم يتم تسجيل البيع")
+                                } else {
+                                    val tid = db.insertTransaction(
+                                        customerId, refillId, qty, price, paid, due,
+                                        "cash", dueDate, paymentType, operator
+                                    )
+                                    if (tid <= 0) {
+                                        responseJson.put("success", false)
+                                        responseJson.put("error", "تعذر تسجيل المعاملة")
+                                    } else {
+                                        responseJson.put("success", true)
+                                        responseJson.put("transaction_id", tid)
+                                        responseJson.put("invoice_number", db.getTransactionById(tid)?.getString("invoice_number"))
+                                        responseJson.put("message", "تم البيع بنجاح")
+                                    }
+                                }
                             }
                         }
                     }
@@ -266,9 +275,9 @@ class SMSService : Service() {
                             responseJson.put("success", false)
                             responseJson.put("error", "بيانات غير صالحة")
                         } else {
-                            db.processPayment(customerId, amount, operator)
-                            responseJson.put("success", true)
-                            responseJson.put("message", "تم التسديد")
+                            val paid = db.processPayment(customerId, amount, operator)
+                            responseJson.put("success", paid)
+                            responseJson.put("message", if (paid) "تم التسديد" else "تعذر تسجيل السداد")
                         }
                     }
                     "get_dashboard" -> {

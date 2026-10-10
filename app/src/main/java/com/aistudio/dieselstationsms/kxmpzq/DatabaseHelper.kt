@@ -1,5 +1,5 @@
 // DatabaseHelper.kt
-package com.aistudio.telecomsms
+package com.aistudio.dieselstationsms.kxmpzq
 
 import android.content.ContentValues
 import android.content.Context
@@ -37,7 +37,7 @@ import java.util.concurrent.locks.ReentrantLock
  * 14. audit_log              - سجل التدقيق
  * ═══════════════════════════════════════════════════════════════
  */
-class DatabaseHelper private constructor(context: Context) : 
+class DatabaseHelper(private val context: Context) :
     SQLiteOpenHelper(context.applicationContext, DB_NAME, null, VERSION) {
 
     companion object {
@@ -561,7 +561,7 @@ class DatabaseHelper private constructor(context: Context) :
         return try {
             val db = readableDatabase
             db.rawQuery(
-                "SELECT * FROM customers WHERE phone1 = ? OR phone2 = ? OR phone3 = ? AND is_deleted = 0 LIMIT 1",
+                "SELECT * FROM customers WHERE (phone1 = ? OR phone2 = ? OR phone3 = ?) AND status = 'active' AND is_deleted = 0 LIMIT 1",
                 arrayOf(normalizedPhone, normalizedPhone, normalizedPhone)
             ).use { cursor ->
                 if (cursor.moveToFirst()) cursorToJsonObject(cursor) else null
@@ -715,7 +715,7 @@ class DatabaseHelper private constructor(context: Context) :
                         currentBalance = cursor.getDouble(0)
                         currentDeposit = cursor.getDouble(1)
                     } else {
-                        return@try false
+                        return false
                     }
                 }
 
@@ -752,17 +752,17 @@ class DatabaseHelper private constructor(context: Context) :
                 arrayOf(customerId.toString())
             ).use { cursor ->
                 if (!cursor.moveToFirst()) {
-                    return@try Pair(false, "العميل غير موجود")
+                    return Pair(false, "العميل غير موجود")
                 }
                 val allowCredit = cursor.getInt(0) == 1
                 val creditLimit = cursor.getDouble(1)
                 val currentBalance = cursor.getDouble(2)
 
                 if (!allowCredit) {
-                    return@try Pair(false, "العميل لا يسمح له بالشراء بالأجل")
+                    return Pair(false, "العميل لا يسمح له بالشراء بالأجل")
                 }
                 if (currentBalance + amount > creditLimit) {
-                    return@try Pair(false, "تجاوز الحد الائتماني المسموح به (${creditLimit.toInt()} ريال)")
+                    return Pair(false, "تجاوز الحد الائتماني المسموح به (${creditLimit.toInt()} ريال)")
                 }
                 Pair(true, "مسموح")
             }
@@ -953,6 +953,15 @@ class DatabaseHelper private constructor(context: Context) :
         } finally {
             dbLock.unlock()
         }
+    }
+
+    fun setActivationCommand(serviceCode: String, command: String): Boolean {
+        if (serviceCode.isBlank() || command.length > 200) return false
+        dbLock.lock()
+        return try {
+            val values = ContentValues().apply { put("activation_command", command.trim()); put("updated_at", getCurrentDateTime()) }
+            writableDatabase.update("services", values, "service_code = ? AND is_deleted = 0", arrayOf(serviceCode)) > 0
+        } finally { dbLock.unlock() }
     }
 
     /**
@@ -1342,7 +1351,7 @@ class DatabaseHelper private constructor(context: Context) :
                     if (cursor.moveToFirst()) {
                         activationCommand = cursor.getString(0)
                     } else {
-                        return@try -1
+                        return -1
                     }
                 }
 
@@ -2096,26 +2105,7 @@ class DatabaseHelper private constructor(context: Context) :
     // 14. دوال مساعدة
     // ================================================================
 
-    private fun normalizePhone(phone: String): String {
-        if (phone.isBlank()) return ""
-        return phone.trim()
-            .replace(" ", "")
-            .replace("-", "")
-            .replace("(", "")
-            .replace(")", "")
-            .replace("+", "")
-            .let {
-                when {
-                    it.startsWith("00966") -> it.substring(5)
-                    it.startsWith("966") -> it.substring(3)
-                    it.startsWith("00") -> it.substring(2)
-                    else -> it
-                }
-            }
-            .let {
-                if (it.length == 9 && !it.startsWith("966")) "966$it" else it
-            }
-    }
+    private fun normalizePhone(phone: String): String = SmsTextAnalysis.normalizePhone(phone)
 
     private fun cursorToJsonArray(cursor: Cursor): JSONArray {
         val arr = JSONArray()
