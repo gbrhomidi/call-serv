@@ -61,7 +61,7 @@
 ## 7. إصدار APK وتحديث التطبيق المثبت
 
 - سير GitHub Actions يتحقق من واجهة SMS واختبارات Kotlin/Robolectric ويبني Debug للتحقق. في طلبات الدمج إلى `main` لا تُستخدم أسرار التوقيع ولا يُنشَر APK.
-- عند الدفع إلى `main` أو فرع الإصدار المصرح به، يُبنى Release موقّع وتُرفع حزمة `CallServ_SMS_Activation_Release` مع `SHA256SUMS.txt` إلى تبويب **Actions** (صالح للتنزيل 14 يوماً).
+- عند الدفع إلى `main` بعد الدمج، يُبنى Release موقّع وتُرفع حزمة `CallServ_SMS_Activation_Release` مع `SHA256SUMS.txt` إلى تبويب **Actions** (صالح للتنزيل 14 يوماً). فرع الميزة وطلبات الدمج يشغّلان التحقق فقط ولا يحصلان على أسرار التوقيع.
 - ثُبّت `applicationId` الحالي `com.aistudio.dieselstationsms.kxmpzq`، ورُفع `versionCode` إلى 301 (`versionName` 3.0.1) كي يكون أعلى من خط أساس المشروع السابق (300). الإصدارات التالية يجب أن ترفع `versionCode` مرة أخرى.
 - لكي يحدّث Android التطبيق الموجود بدلاً من طلب إزالة النسخة القديمة، يجب أن يكون APK الجديد **موقّعاً بالمفتاح نفسه** الذي وقّع النسخة المثبتة، وأن يبقى `applicationId` ثابتاً وأن يكون `versionCode` أعلى. بعد تنزيل ملف APK على الهاتف وفتحه، يتولى Android تثبيته كتحديث للتطبيق؛ لا يستطيع GitHub Actions تثبيت APK مباشرة على هاتف غير متصل بمشغل CI.
 - يجب إضافة الأسرار التالية في GitHub: **Settings → Secrets and variables → Actions**: `RELEASE_KEYSTORE_BASE64`, `RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`. أدخل فقط بيانات مفتاح التوقيع الإنتاجي المعتمد والمستخدم للنسخة المثبتة؛ لا تضع ملف المفتاح أو كلمات المرور في Git أو رسائل المحادثة. إذا غابت الأسرار يفشل Job الإصدار برسالة واضحة ولا يرفع APK غير موقّع.

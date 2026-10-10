@@ -61,10 +61,8 @@ jobs:
   release:
     name: Build Signed Upgrade APK
     needs: validate
-    # Release signing is unavailable to pull requests and all unapproved refs.
-    if: >-
-      github.ref == 'refs/heads/main' ||
-      github.ref == 'refs/heads/feat/sms-activation-bank-reconciliation'
+    # Only the production branch may access signing secrets. Pull requests and feature pushes validate only.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
