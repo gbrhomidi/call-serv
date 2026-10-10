@@ -165,7 +165,7 @@ internal object SmsCommandProcessor {
             reply(context, helper, request.optString("customer_phone"), "لم يبدأ التفعيل: رقم هاتف المورد غير مضبوط، ولم يتم خصم أي مبلغ.")
             return
         }
-        val command = resolveCommand(request.optString("activation_command"), request.optString("customer_phone"))
+        val command = SmsTextAnalysis.buildUssdCommand(request.optString("activation_command"), request.optString("customer_phone"))
         if (command == null) {
             store.markFailed(requestId, "أمر التفعيل الكامل يجب أن يحتوي خانة phone صالحة")
             reply(context, helper, request.optString("customer_phone"), "لم يبدأ التفعيل: أمر الخدمة يجب أن يحتوي (phone) لاستبداله برقمك. لم يتم خصم أي مبلغ.")
@@ -199,15 +199,6 @@ internal object SmsCommandProcessor {
             reply(context, helper, request.optString("customer_phone"), "تعذر إرسال أمر التفعيل عبر الشبكة. لم يتم تسجيل التفعيل كناجح.")
             Log.e(TAG, "USSD dispatch failed", e)
         }
-    }
-
-    private fun resolveCommand(template: String, phone: String): String? {
-        if (template.isBlank() || phone.isBlank()) return null
-        val markerPattern = Regex("(?i)\\(\\s*phone\\s*\\)|\\{\\{?\\s*phone\\s*}?\\}|%phone%|\\bphone\\b")
-        if (!markerPattern.containsMatchIn(template)) return null
-        val command = markerPattern.replace(template) { SmsTextAnalysis.normalizePhone(phone) }
-        if (command.length !in 3..100 || !command.matches(Regex("[0-9*#+,;.\\-]+"))) return null
-        return command
     }
 
     private fun scheduleTimeout(context: Context, requestId: Long, attempt: Int) {

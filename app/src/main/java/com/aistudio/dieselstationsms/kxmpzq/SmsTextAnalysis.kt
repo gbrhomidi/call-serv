@@ -32,6 +32,18 @@ internal object SmsTextAnalysis {
 
     fun normalizePhone(phone: String): String = normalizeDigits(phone).filter(Char::isDigit).takeLast(9)
 
+    /** Replaces the full-command phone placeholder only after a payment/request is authorized. */
+    fun buildUssdCommand(template: String, phone: String): String? {
+        if (template.isBlank() || phone.isBlank()) return null
+        val normalizedPhone = normalizePhone(phone)
+        if (normalizedPhone.length < 7) return null
+        val marker = Regex("(?i)\\(\\s*phone\\s*\\)|\\{\\{?\\s*phone\\s*}?\\}|%phone%|\\bphone\\b")
+        if (!marker.containsMatchIn(template)) return null
+        val command = marker.replace(template) { normalizedPhone }
+        if (command.length !in 3..100 || !command.matches(Regex("[0-9*#+,;.\\-]+"))) return null
+        return command
+    }
+
     fun toCents(raw: String): Long? = try {
         BigDecimal(normalizeDigits(raw).replace(",", "").replace("٬", "").replace("٫", ".").trim())
             .setScale(2, RoundingMode.UNNECESSARY).movePointRight(2).longValueExact()

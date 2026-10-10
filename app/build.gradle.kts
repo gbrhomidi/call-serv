@@ -7,7 +7,7 @@ plugins {
 val geminiApiKey = (project.findProperty("GEMINI_API_KEY") as? String).orEmpty()
     .replace("\\", "\\\\")
     .replace("\"", "\\\"")
-
+val releaseKeystorePath = System.getenv("RELEASE_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
 android {
     namespace = "com.aistudio.dieselstationsms.kxmpzq"
     compileSdk = 34
@@ -16,10 +16,30 @@ android {
         applicationId = "com.aistudio.dieselstationsms.kxmpzq"
         minSdk = 21
         targetSdk = 34
-        versionCode = 1
-        versionName = "3.0"
+        // Keep the applicationId/signing key stable and increment above the original 300 build.
+        versionCode = 301
+        versionName = "3.0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
+    }
+
+    signingConfigs {
+        if (releaseKeystorePath != null) {
+            create("release") {
+                storeFile = file(releaseKeystorePath)
+                storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD").orEmpty()
+                keyAlias = System.getenv("RELEASE_KEY_ALIAS").orEmpty()
+                keyPassword = System.getenv("RELEASE_KEY_PASSWORD").orEmpty()
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            if (releaseKeystorePath != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
     }
 
     buildFeatures {

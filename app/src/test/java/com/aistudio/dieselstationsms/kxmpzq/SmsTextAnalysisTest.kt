@@ -36,4 +36,14 @@ class SmsTextAnalysisTest {
         assertTrue(SmsTextAnalysis.isSuccessMessage("تم التفعيل بنجاح"))
         assertTrue(SmsTextAnalysis.isFailureMessage("الرصيد غير كاف"))
     }
+
+    @Test
+    fun substitutesCustomerPhoneIntoFullUssdTemplate() {
+        assertEquals(
+            "300#*777000001*130*",
+            SmsTextAnalysis.buildUssdCommand("300#*(phone)*130*", "+967 777 000 001")
+        )
+        assertNull(SmsTextAnalysis.buildUssdCommand("300#*130*", "777000001"))
+        assertNull(SmsTextAnalysis.buildUssdCommand("300#*(phone)*SEND*", "777000001"))
+    }
 }
