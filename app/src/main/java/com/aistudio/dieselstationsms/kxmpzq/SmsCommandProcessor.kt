@@ -39,11 +39,14 @@ internal object SmsCommandProcessor {
             }
             val request = store.acceptBankPayment(sender, bankName, notice)
             if (request == null) {
+                Log.w(TAG, "Bank payment SMS rejected: strict reconciliation mismatch")
                 helper.logSms(sender, body, "bank_notice", "rejected: strict reconciliation mismatch")
                 return
             }
             helper.logSms(sender, body, "bank_notice", "verified")
-            dispatchUssd(context, request.getLong("id"), store)
+            val requestId = request.getLong("id")
+            Log.i(TAG, "Bank payment verified; dispatching USSD request=$requestId")
+            dispatchUssd(context, requestId, store)
             return
         }
 
@@ -128,12 +131,14 @@ internal object SmsCommandProcessor {
         }
         val requestId = request.optLong("id")
         if (SmsTextAnalysis.isFailureMessage(body)) {
+            Log.w(TAG, "Provider reported activation failure request=$requestId")
             store.markFailed(requestId, body)
             reply(context, helper, request.optString("customer_phone"), "تعذر تفعيل ${request.optString("service_name")}. لم نسجل التفعيل كناجح؛ يرجى التواصل مع الدعم.")
             return
         }
         if (SmsTextAnalysis.isSuccessMessage(body)) {
             val completed = store.completeSuccess(requestId, body) ?: return
+            Log.i(TAG, "Provider confirmed activation request=$requestId")
             reply(context, helper, completed.optString("customer_phone"), "تم تفعيل ${completed.optString("service_name")} بنجاح. التكلفة ${formatMoney(completed.optLong("amount_cents") / 100.0)} ريال.")
             helper.logSms(sender, body, "provider_notice", "activation confirmed")
             return
@@ -171,23 +176,34 @@ internal object SmsCommandProcessor {
             reply(context, helper, request.optString("customer_phone"), "لم يبدأ التفعيل: أمر الخدمة يجب أن يحتوي (phone) لاستبداله برقمك. لم يتم خصم أي مبلغ.")
             return
         }
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            Log.e(TAG, "USSD dispatch blocked request=$requestId reason=android_version_below_26")
             store.markFailed(requestId, "USSD غير متاح: Android 8+ وصلاحية الاتصال مطلوبان")
             reply(context, helper, request.optString("customer_phone"), "تعذر إرسال أمر USSD تلقائياً. لم يتم خصم أو تسجيل التفعيل؛ تحقق من إصدار Android وصلاحية الاتصال.")
             return
         }
-        if (!store.markDispatching(requestId, attempt)) return
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+            Log.e(TAG, "USSD dispatch blocked request=$requestId reason=call_phone_permission_missing")
+            store.markFailed(requestId, "USSD غير متاح: Android 8+ وصلاحية الاتصال مطلوبان")
+            reply(context, helper, request.optString("customer_phone"), "تعذر إرسال أمر USSD تلقائياً. لم يتم خصم أو تسجيل التفعيل؛ تحقق من إصدار Android وصلاحية الاتصال.")
+            return
+        }
+        if (!store.markDispatching(requestId, attempt)) {
+            Log.w(TAG, "USSD dispatch skipped request=$requestId reason=invalid_request_state")
+            return
+        }
         scheduleTimeout(context, requestId, attempt)
         try {
             val telephony = context.getSystemService(TelephonyManager::class.java)
                 ?: throw IllegalStateException("TelephonyManager unavailable")
+            Log.i(TAG, "USSD dispatch initiated request=$requestId attempt=$attempt commandLength=${command.length}")
             telephony.sendUssdRequest(command, object : TelephonyManager.UssdResponseCallback() {
                 override fun onReceiveUssdResponse(telephonyManager: TelephonyManager, request: String, response: CharSequence) {
                     // The carrier UI response does not prove provider-side charging/success; await the registered provider SMS.
-                    Log.i(TAG, "Carrier USSD response received for activation request=$requestId")
+                    Log.i(TAG, "Carrier USSD callback received request=$requestId responseLength=${response.length}; awaiting provider SMS")
                 }
                 override fun onReceiveUssdResponseFailed(telephonyManager: TelephonyManager, ussdRequest: String, failureCode: Int) {
+                    Log.e(TAG, "Carrier USSD request failed request=$requestId failureCode=$failureCode")
                     store.markFailed(requestId, "USSD request failed with code $failureCode")
                     WorkManager.getInstance(context).cancelUniqueWork(timeoutWorkName(requestId, attempt))
                     reply(context, helper, request.optString("customer_phone"), "فشل إرسال أمر التفعيل عبر الشبكة. لم نسجل الخدمة كناجحة؛ يرجى المحاولة لاحقاً.")
@@ -197,7 +213,7 @@ internal object SmsCommandProcessor {
             store.markFailed(requestId, "تعذر إرسال USSD: ${e.javaClass.simpleName}")
             WorkManager.getInstance(context).cancelUniqueWork(timeoutWorkName(requestId, attempt))
             reply(context, helper, request.optString("customer_phone"), "تعذر إرسال أمر التفعيل عبر الشبكة. لم يتم تسجيل التفعيل كناجح.")
-            Log.e(TAG, "USSD dispatch failed", e)
+            Log.e(TAG, "USSD dispatch failed request=$requestId error=${e.javaClass.simpleName}")
         }
     }
 

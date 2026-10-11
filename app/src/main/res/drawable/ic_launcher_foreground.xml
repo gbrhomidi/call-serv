@@ -4,10 +4,11 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Monochrome adaptive icon: a clear message bubble with a handset mark. -->
     <path
-        android:fillColor="#D4AF37"
-        android:pathData="M54,30 L60,30 L60,50 L70,50 L70,65 L60,65 L60,78 L54,78 L54,65 L44,65 L44,50 L54,50 Z" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M22,28 C22,23.6 25.6,20 30,20 H78 C82.4,20 86,23.6 86,28 V62 C86,66.4 82.4,70 78,70 H48 L32,84 V70 H30 C25.6,70 22,66.4 22,62 Z" />
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M38,40 L42,40 L42,70 L38,70 Z" />
+        android:fillColor="#FF03174B"
+        android:pathData="M41,37 C39.8,38.2 39,39.8 39,41.5 C39,52.3 47.7,61 58.5,61 C60.2,61 61.8,60.2 63,59 L67,55 C67.8,54.2 67.7,52.9 66.8,52.2 L60.8,47.6 C60,47 58.9,47.1 58.2,47.8 L55.5,50.5 C52.6,49.4 50.3,47.1 49.2,44.2 L51.9,41.5 C52.6,40.8 52.7,39.7 52.1,38.9 L47.5,32.9 C46.8,32 45.5,31.9 44.7,32.7 Z" />
 </vector>

@@ -49,6 +49,8 @@
 
 ## 6. التحقق
 
+لدليل السيناريوهات اليدوية ومراقبة Logcat، راجع [حالات اختبار الدفع والاتصال عبر USSD](SMS_PAYMENT_CALL_TEST_CASES.md).
+
 من جذر المشروع:
 
 ```bash
@@ -59,6 +61,8 @@
 
 
 ## 7. إصدار APK وتحديث التطبيق المثبت
+
+لإنشاء المفتاح الثابت وإضافة GitHub Secrets دون كشفها، راجع [دليل إعداد Release Keystore](RELEASE_KEYSTORE_SETUP.md).
 
 - سير GitHub Actions يتحقق من واجهة SMS واختبارات Kotlin/Robolectric ويبني Debug. طلبات الدمج تشغّل التحقق فقط ولا ترفع APK.
 - عند الدفع إلى `feat/sms-activation-bank-reconciliation`، تُفحص نسخة Debug الموقّعة ويُرفع artifact باسم `CallServ_SMS_Activation_FreshInstall` مع SHA256 إلى تبويب **Actions** (صالح 14 يوماً). هذا بناء تطوير كامل قابل للتثبيت وموقّع بمفتاح Android debug مؤقت من عامل CI، وليس إصداراً إنتاجياً.

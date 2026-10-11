@@ -24,24 +24,25 @@ class SmsReceiver : BroadcastReceiver() {
                 grouped.forEach { (sender, parts) ->
                     val body = parts.joinToString(separator = "") { it.displayMessageBody.orEmpty() }.trim()
                     if (body.isBlank() || body.length > MAX_MESSAGE_LENGTH) {
-                        Log.w(TAG, "Ignoring empty/oversized SMS from $sender")
+                        Log.w(TAG, "Ignoring empty/oversized inbound SMS")
                         return@forEach
                     }
                     val receivedAt = parts.minOfOrNull { it.timestampMillis } ?: System.currentTimeMillis()
                     if (!store.claimIncoming(sender, body, receivedAt)) {
-                        Log.d(TAG, "Duplicate SMS ignored from $sender")
+                        Log.d(TAG, "Duplicate inbound SMS ignored")
                         return@forEach
                     }
+                    Log.i(TAG, "Inbound SMS accepted for processing")
                     try {
                         SmsCommandProcessor.process(context.applicationContext, sender, body)
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to process SMS", e)
+                        Log.e(TAG, "Failed to process inbound SMS error=${e.javaClass.simpleName}")
                         DatabaseHelper.getInstance(context.applicationContext)
                             .logSms(sender, body, "received", "failed: ${e.javaClass.simpleName}")
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "SMS receiver failed", e)
+                Log.e(TAG, "SMS receiver failed error=${e.javaClass.simpleName}")
             } finally {
                 pending.finish()
             }
