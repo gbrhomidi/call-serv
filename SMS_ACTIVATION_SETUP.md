@@ -50,6 +50,7 @@
 ## 6. التحقق
 
 لدليل السيناريوهات اليدوية ومراقبة Logcat، راجع [حالات اختبار الدفع والاتصال عبر USSD](SMS_PAYMENT_CALL_TEST_CASES.md).
+مراقبة الإنتاج المركزية غير مفعلة حتى توفير مصدر/وجهة معتمدين؛ راجع [حالة ومتطلبات مراقبة Logcat الإنتاجية](PRODUCTION_LOGCAT_MONITORING.md).
 
 من جذر المشروع:
 
@@ -66,10 +67,10 @@
 
 - سير GitHub Actions يتحقق من واجهة SMS واختبارات Kotlin/Robolectric ويبني Debug. طلبات الدمج تشغّل التحقق فقط ولا ترفع APK.
 - عند الدفع إلى `feat/sms-activation-bank-reconciliation`، تُفحص نسخة Debug الموقّعة ويُرفع artifact باسم `CallServ_SMS_Activation_FreshInstall` مع SHA256 إلى تبويب **Actions** (صالح 14 يوماً). هذا بناء تطوير كامل قابل للتثبيت وموقّع بمفتاح Android debug مؤقت من عامل CI، وليس إصداراً إنتاجياً.
-- عند الدفع إلى `main` بعد الدمج، يُبنى Release إنتاجي موقّع ويُرفع artifact باسم `CallServ_SMS_Activation_Release` مع SHA256. أسرار التوقيع متاحة لهذا المسار فقط.
+- على `main` بعد الدمج، يُبنى Release إنتاجي موقّع ويُرفع artifact باسم `CallServ_SMS_Activation_Release` مع SHA256. أسرار التوقيع لا تتاح لـPull Requests. دفع فرع الميزة يشغّل أيضاً فحصاً للأسرار `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS=call-serv`, و`KEY_PASSWORD`، ويعرض بصمة الشهادة في Summary؛ بعد مطابقتها بمفتاح الإنتاج أضف `EXPECTED_CERT_SHA256` قبل إصدار `main`.
 - ثُبّت `applicationId` الحالي `com.aistudio.dieselstationsms.kxmpzq`، ورُفع `versionCode` إلى 301 (`versionName` 3.0.1) كي يكون أعلى من خط أساس المشروع السابق (300). الإصدارات التالية يجب أن ترفع `versionCode` مرة أخرى.
 - لتحديث النسخة المثبتة دون إزالتها، يجب أن يكون APK موقّعاً بالمفتاح الإنتاجي نفسه، مع بقاء `applicationId` وارتفاع `versionCode`. أما APK الفرع فهي Fresh Install: أزل التطبيق القديم يدوياً أولاً ثم ثبّت الملف الجديد؛ الإزالة تمسح بيانات التطبيق المحلية، كما أن مفتاح debug المؤقت يعني ضرورة الإزالة قبل تثبيت بناء فرع لاحق. لا يستطيع GitHub Actions تنفيذ الإزالة أو التثبيت مباشرة على هاتف المستخدم.
-- يجب إضافة الأسرار التالية في GitHub: **Settings → Secrets and variables → Actions**: `RELEASE_KEYSTORE_BASE64`, `RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`. أدخل فقط بيانات مفتاح التوقيع الإنتاجي المعتمد والمستخدم للنسخة المثبتة؛ لا تضع ملف المفتاح أو كلمات المرور في Git أو رسائل المحادثة. إذا غابت الأسرار يفشل Job الإصدار برسالة واضحة ولا يرفع APK غير موقّع.
+- أسماء الأسرار المتوافقة مع workflow الحالي هي `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`, بالإضافة إلى `EXPECTED_CERT_SHA256` لتثبيت بصمة الشهادة. راجع [دليل إعداد Release Keystore](RELEASE_KEYSTORE_SETUP.md). لا تضع ملف المفتاح أو كلمات المرور في Git أو رسائل المحادثة.
 
 ### تثبيت بناء الفرع كنسخة جديدة
 

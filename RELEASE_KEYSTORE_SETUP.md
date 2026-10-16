@@ -1,91 +1,91 @@
-# إعداد مفتاح توقيع الإنتاج (Release Keystore)
+# إعداد أسرار توقيع الإنتاج والتحقق منها
 
-## لماذا نحتاج المفتاح نفسه؟
+## أسماء الأسرار التي يقرأها المشروع الآن
 
-يتحقق Android عند تحديث التطبيق من تطابق **معرّف الحزمة** وشهادة التوقيع. في هذا المشروع المعرّف هو `com.aistudio.dieselstationsms.kxmpzq`. إذا كانت النسخة الجديدة موقعة بمفتاح مختلف، يرفضها Android كتحديث؛ أما استخدام المفتاح نفسه مع `versionCode` أعلى فيسمح بالتحديث فوق النسخة الحالية مع الاحتفاظ ببيانات التطبيق.
+يتحقق GitHub Actions عند الدفع إلى فرع `feat/sms-activation-bank-reconciliation` من أربعة أسرار Actions بالأسماء التالية **كما هي تماماً**:
 
-> **مهم لهذه الحالة:** ملف APK الذي يرفعه فرع `feat/sms-activation-bank-reconciliation` هو بناء Debug موقع بمفتاح مؤقت من GitHub Actions. لا يمكن استبداله مباشرة بنسخة Release ذات مفتاح إنتاجي مختلف. يلزم الانتقال إلى مفتاح Release مرة واحدة، وقد يتطلب ذلك إزالة نسخة Debug الموجودة وإعادة تثبيت Release؛ إزالة التطبيق تمسح بياناته المحلية. بعد ذلك، ما دام مفتاح Release نفسه محفوظاً وثابتاً، يمكن تثبيت إصدارات Release اللاحقة كتحديثات عادية دون حذف التطبيق.
+| اسم السر | المطلوب |
+|---|---|
+| `KEYSTORE_BASE64` | محتوى ملف keystore الحالي بعد ترميزه Base64 دون التفاف أسطر |
+| `KEYSTORE_PASSWORD` | كلمة مرور keystore |
+| `KEY_ALIAS` | يجب أن تكون `call-serv` |
+| `KEY_PASSWORD` | كلمة مرور المفتاح/alias |
 
-إذا كانت النسخة المثبتة موقعة أصلاً بشهادة إنتاج سابقة، فاستعد **ملف keystore الأصلي** بدلاً من إنشاء مفتاح جديد. لا يمكن تغيير توقيع التطبيق المثبت بمفتاح مختلف مع ضمان بقاء بياناته. إذا فُقد مفتاح التوقيع القديم ولم يوجد backup، لا يستطيع هذا الدليل استعادته.
-
-## 1. إنشاء المفتاح مرة واحدة
-
-أنشئه على كمبيوتر موثوق غير مشترك، خارج مجلد المشروع ومستودع Git. لا ترسل المفتاح أو كلمة مروره إلى أي شخص.
-
-```bash
-mkdir -p "$HOME/secure-signing/call-serv"
-cd "$HOME/secure-signing/call-serv"
-umask 077
-keytool -genkeypair -v \
-  -keystore callserv-release.p12 \
-  -storetype PKCS12 \
-  -alias callserv-release \
-  -keyalg RSA -keysize 4096 -validity 10000
-```
-
-أدخل كلمة مرور قوية وفريدة عند مطالبة `keytool` بها. لا تضف كلمة المرور إلى الأمر نفسه أو إلى ملف داخل المشروع. احتفظ باسم الملف والـalias وكلمتي مرور keystore/key في مدير كلمات مرور مؤسسي/موثوق. في PKCS12 قد تكون كلمة مرور المفتاح مطابقة لكلمة مرور keystore حسب طريقة الإنشاء؛ استخدم القيم التي أدخلتها عند إعداد GitHub Secrets.
-
-## 2. فحص المفتاح وحفظ بصمة الشهادة
-
-```bash
-keytool -list -v -keystore callserv-release.p12 -alias callserv-release
-keytool -exportcert -rfc -keystore callserv-release.p12 -alias callserv-release \
-  | openssl x509 -noout -fingerprint -sha256
-```
-
-تحقق أن نوع الملف PKCS12 وأن alias صحيح، وسجّل بصمة `SHA256` في مكان آمن. احتفظ بنسختين احتياطيتين مشفرتين من ملف `.p12` في موقعين آمنين منفصلين. **لا ترفع keystore إلى GitHub ولا ترفقه كـartifact ولا ترسله في المحادثة.**
-
-## 3. إضافة GitHub Actions Secrets
-
-من المستودع `gbrhomidi/call-serv` افتح:
-
-**Settings → Secrets and variables → Actions → New repository secret**
-
-أنشئ الأسرار التالية بالأسماء المطابقة تماماً لـ`.github/workflows/android.yml`:
+بعد أول تحقق موثوق، يطبع Job `Verify Release Signing Secrets` بصمة شهادة `SHA-256` في **Summary**. راجعها مع بصمة المفتاح الإنتاجي الموثوق، ثم أضف السر:
 
 | اسم السر | القيمة |
 |---|---|
-| `RELEASE_KEYSTORE_BASE64` | محتوى ملف keystore بعد ترميزه Base64 دون التفاف أسطر |
-| `RELEASE_KEYSTORE_PASSWORD` | كلمة مرور ملف keystore |
-| `RELEASE_KEY_ALIAS` | `callserv-release` أو alias الفعلي الذي أنشأته |
-| `RELEASE_KEY_PASSWORD` | كلمة مرور المفتاح/alias التي طلبها Gradle |
+| `EXPECTED_CERT_SHA256` | بصمة الشهادة الموثوقة، مع النقطتين أو من دونهما |
 
-على Linux، خذ قيمة Base64 للنسخ إلى حقل السر هكذا:
+على فرع الميزة، يمكن أن يغيب `EXPECTED_CERT_SHA256` في أول تشغيل؛ يعرض Summary البصمة ويطلب تثبيتها. على `main` يصبح هذا السر إلزامياً، ولا يصدر workflow APK Release قبل تطابق البصمة. لا تعتمد بصمة من تشغيل Pull Request أو من فرع/commit غير موثوق.
+
+## استخدم keystore الإنتاج الموجود
+
+لا تنشئ مفتاحاً جديداً ولا تغيّر alias لمجرد مواءمة أسماء الأسرار؛ تغيير شهادة توقيع التطبيق قد يمنع تحديث النسخة المثبتة. استخدم ملف التوقيع الإنتاجي الحالي الذي يعود إليك وتحقق من alias قبل رفع السر:
 
 ```bash
-base64 -w 0 callserv-release.p12
+keytool -list -v -keystore /path/to/call-serv.jks -alias call-serv
 ```
 
-لا تحفظ المخرجات داخل المشروع ولا تلصقها في محادثة أو issue. على PowerShell في Windows يمكن إنتاج القيمة بـ:
+أدخل كلمة المرور عند المطالبة بها، ولا تضفها إلى الأمر أو Git. إذا لم يظهر alias `call-serv` أو كانت شهادة الملف مختلفة عن نسخة الإنتاج الحالية، **أوقف الإصدار ولا تعِد تسمية/تستبدل المفتاح عشوائياً**؛ يلزم تحديد مفتاح التوقيع الذي وقّع النسخة المنشورة فعلاً.
+
+## ترميز الملف وإضافة الأسرار
+
+من مستودع `gbrhomidi/call-serv` افتح:
+
+**Settings → Secrets and variables → Actions → New repository secret**
+
+على Linux، ولنسخ Base64 مباشرة إلى حقل السر:
+
+```bash
+base64 -w 0 /path/to/call-serv.jks
+```
+
+لا تحفظ المخرجات في مجلد المشروع ولا تلصق المفتاح أو كلمات المرور في issue أو محادثة. على PowerShell:
 
 ```powershell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\secure\callserv-release.p12"))
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\secure\call-serv.jks"))
 ```
 
-أدخل القيمة مباشرة في GitHub Secrets ثم أغلق/امسح حافظة النسخ المؤقتة. لا يلزم إظهار قيم الأسرار في logs. إذا كنت تستخدم GitHub CLI على جهاز موثوق، يمكن إرسال Base64 عبر stdin بدلاً من طباعته:
+أدخل الأسرار الأربعة بالأسماء في الجدول أعلاه. احتفظ بـ`KEY_ALIAS=call-serv` كما هو. بعد مراجعة بصمة Summary من تشغيل موثوق، أضف `EXPECTED_CERT_SHA256` كما هو موضح.
+
+إذا كنت تستخدم GitHub CLI على جهاز موثوق، يمكن إرسال Base64 من stdin دون طباعته:
 
 ```bash
-base64 -w 0 callserv-release.p12 | gh secret set RELEASE_KEYSTORE_BASE64 --repo gbrhomidi/call-serv
+base64 -w 0 /path/to/call-serv.jks | gh secret set KEYSTORE_BASE64 --repo gbrhomidi/call-serv
 ```
 
-وأدخل كلمات المرور وalias من مطالبة `gh secret set SECRET_NAME` التفاعلية، لا كوسيط ظاهر في سجل shell.
+أدخل كلمات المرور وalias تفاعلياً عبر `gh secret set SECRET_NAME`، لا كوسيط ظاهر في سجل shell. قيم الأسرار لا يمكن قراءتها مجدداً عبر GitHub؛ يمكن استبدالها فقط.
 
-## 4. اختبار إصدار Release
+## سلوك workflow وحدود الأسرار
 
-1. لا تغيّر `applicationId` أو ملف التوقيع/alias في الإصدارات اللاحقة.
-2. ارفع `versionCode` إلى قيمة أكبر من النسخة المثبتة في كل إصدار جديد؛ النسخة الحالية بالمشروع `301`.
-3. ادفع التغييرات إلى `main` بعد مراجعتها. سير العمل يقصر الوصول لأسرار التوقيع على `main`، ويتحقق من توقيع APK ومعرّف الحزمة ورقم الإصدار قبل رفع artifact `CallServ_SMS_Activation_Release`.
-4. نزّل APK وملف `SHA256SUMS.txt` من تشغيل Actions نفسه، وتحقق محلياً:
+هذا الفحص يراقب سلامة إعداد توقيع APK فقط، ولا يقرأ Logcat من الهواتف المنتجة. حالة ومتطلبات المراقبة التشغيلية موضحة في [دليل مراقبة Logcat الإنتاجية](PRODUCTION_LOGCAT_MONITORING.md).
+
+- `verify-secrets` يعمل عند الدفع/التشغيل اليدوي على `main` أو فرع الميزة، ويتحقق من وجود الأسرار، وصحة alias، وإمكانية فتح keystore، ثم يحسب SHA-256 ويقارنه بالـpin إن أُضيف.
+- Pull Requests تشغّل الاختبارات والبناء العام **من دون إتاحة أسرار التوقيع**؛ هذا حد أمني مقصود، وليس عائقاً لتجاوز التحقق.
+- إعداد Gradle يقرأ `KEYSTORE_FILE`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`. يستخرج workflow ملف المفتاح إلى مجلد مؤقت خارج مساحة المشروع، ويحذفه بعد الاستخدام.
+- `KEYSTORE_FILE` متغير مسار محلي/مؤقت، وليس Secret باسم `KEYSTORE_FILE`.
+- APK Debug المرفوعة من فرع الميزة موقعة بمفتاح تطوير مؤقت، وهي للتثبيت النظيف فقط. الإصدار الموقع للإنتاج يصدر على `main` بعد نجاح التحقق.
+- لا تضع ملف keystore أو `keystore.properties` أو Base64 في Git. الملف `keystore.properties.example` نموذج بلا بيانات حقيقية؛ انسخه محلياً إلى `keystore.properties` عند الحاجة.
+
+## فحص الملفات الحساسة قبل الدفع
+
+```bash
+git ls-files | grep -Ei '(\.jks$|\.keystore$|base64|keystore\.properties$)' || true
+git status --short
+```
+
+المتوقع ألا يظهر ملف keystore أو خصائص محلية متتبعة. راجع أي نتيجة يدوياً قبل الدفع.
+
+## إصدار Production APK وتحديث التطبيق
+
+1. ادفع التغييرات المراجعة مباشرة إلى `feat/sms-activation-bank-reconciliation`؛ تحقق الأسرار سيظهر في تشغيل Actions لذلك الدفع.
+2. راجع Summary، وتأكد أن بصمة SHA-256 تطابق المفتاح الذي وقّع نسخة الإنتاج، ثم أضفها كسر `EXPECTED_CERT_SHA256`.
+3. بعد الدمج/التحديث على `main`، ينفذ release job البناء ويقارن شهادة APK الناتجة بالبصمة المثبتة، ثم يرفع `CallServ_SMS_Activation_Release` و`SHA256SUMS.txt`.
+4. تحقّق من checksum بعد تنزيل الملف:
 
 ```bash
 sha256sum -c SHA256SUMS.txt
 ```
 
-5. ثبّت APK على الهاتف. إذا كانت الشهادة والمعرّف متطابقين ورقم الإصدار أعلى، يحدّث Android التطبيق مع بياناته. إذا ظهر `App not installed` أو `signature mismatch`، **لا تمسح بيانات التطبيق فوراً**؛ توقف وتحقق من بصمة شهادة النسخة الحالية ومفتاح Release قبل اتخاذ قرار إزالة النسخة.
-
-## حماية المفتاح مستقبلاً
-
-- لا تنشئ keystore جديداً لكل إصدار، ولا تدوّر المفتاح إذا كان الهدف تحديث التطبيق المثبت.
-- احتفظ بملف المفتاح وكلمات مروره والـalias وبصمة الشهادة بشكل منفصل وآمن، مع مالك بديل مخوّل.
-- لا تضع الأسرار في `gradle.properties` الملتزم بالمستودع أو في source code أو workflow YAML.
-- لا تستخدم APK Debug من فرع الميزة كتحديث إنتاجي. استخدمها فقط للاختبار أو التثبيت النظيف، وانتقل إلى Release بتوقيع ثابت مرة واحدة.
+إذا ظل `applicationId` كما هو (`com.aistudio.dieselstationsms.kxmpzq`)، وظل مفتاح التوقيع نفسه وارتفع `versionCode`، يثبت Android التحديث مع الاحتفاظ بالبيانات. إذا ظهر `signature mismatch` فتوقف ولا تحذف التطبيق قبل معرفة الشهادة المثبتة؛ إزالة التطبيق تمحو بياناته المحلية.

@@ -34,6 +34,7 @@ internal class SmsActivationTimeoutWorker(context: Context, params: WorkerParame
 
         if (inputData.getBoolean(KEY_FINALIZE, false)) {
             if (status == "reconciling") {
+                Log.w(TAG, "Provider reconciliation timed out request=$id attempt=$attempt; marking uncertain")
                 store.markUncertain(id, "لم يصل رد رصيد واضح من المورد بعد الاستعلام")
                 SmsCommandProcessor.notifyCustomer(applicationContext, helper, request.optString("customer_phone"), "لا يزال تفعيل ${request.optString("service_name")} غير محسوم. لم نكرر العملية؛ يرجى مراجعة الدعم قبل إعادة الطلب.")
             }
@@ -41,6 +42,7 @@ internal class SmsActivationTimeoutWorker(context: Context, params: WorkerParame
         }
         if (status != "pending_provider" || request.optInt("attempt_count") != attempt) return Result.success()
         if (attempt >= 2) {
+            Log.w(TAG, "Activation confirmation timed out request=$id attempt=$attempt; no further retry")
             store.markUncertain(id, "انتهت مهلة المحاولة الثانية؛ لم تتم إعادة المحاولة مرة أخرى")
             SmsCommandProcessor.notifyCustomer(applicationContext, helper, request.optString("customer_phone"), "لم يصل تأكيد المورد لتفعيل ${request.optString("service_name")}. أوقفنا التكرار منعاً للخصم المزدوج؛ يرجى مراجعة الدعم.")
             return Result.success()
@@ -50,15 +52,20 @@ internal class SmsActivationTimeoutWorker(context: Context, params: WorkerParame
         val providerPhone = SmsTextAnalysis.normalizePhone(request.optString("provider_phone"))
         val hasBaseline = !request.isNull("provider_balance_before_cents") && request.optLong("provider_balance_before_cents", -1L) >= 0
         if (queryTemplate.isBlank() || providerPhone.isBlank() || !hasBaseline) {
+            Log.w(TAG, "Provider timeout cannot be safely reconciled request=$id reason=baseline_or_query_missing")
             store.markUncertain(id, "لا توجد رسالة استعلام/رصيد أساس موثوق؛ لم تتم إعادة المحاولة تلقائياً")
             SmsCommandProcessor.notifyCustomer(applicationContext, helper, request.optString("customer_phone"), "تأخر تأكيد المورد لخدمة ${request.optString("service_name")}. لم نكرر التفعيل لعدم توفر وسيلة تحقق موثوقة؛ تواصل مع الدعم.")
             return Result.success()
         }
         if (ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+            Log.e(TAG, "Provider balance query blocked request=$id reason=send_sms_permission_missing")
             store.markUncertain(id, "صلاحية SMS غير متاحة لإرسال استعلام المورد")
             return Result.success()
         }
-        if (!store.markReconciliation(id)) return Result.success()
+        if (!store.markReconciliation(id)) {
+            Log.w(TAG, "Provider reconciliation skipped request=$id reason=invalid_request_state")
+            return Result.success()
+        }
         val query = queryTemplate.replace(Regex("(?i)\\{phone}|%phone%"), request.optString("customer_phone"))
             .replace(Regex("(?i)\\{service}|%service%"), request.optString("service_name"))
         try {
@@ -66,6 +73,7 @@ internal class SmsActivationTimeoutWorker(context: Context, params: WorkerParame
             val parts = manager.divideMessage(query.take(300))
             if (parts.size > 1) manager.sendMultipartTextMessage(providerPhone, null, parts, null, null)
             else manager.sendTextMessage(providerPhone, null, query, null, null)
+            Log.i(TAG, "Provider balance query sent request=$id attempt=$attempt")
             helper.logSms(providerPhone, query, "provider_balance_query", "sent")
             val finalRequest = OneTimeWorkRequestBuilder<SmsActivationTimeoutWorker>()
                 .setInitialDelay(5, TimeUnit.MINUTES)
@@ -73,9 +81,9 @@ internal class SmsActivationTimeoutWorker(context: Context, params: WorkerParame
                 .build()
             WorkManager.getInstance(applicationContext).enqueueUniqueWork("sms-activation-finalize-$id-$attempt", ExistingWorkPolicy.KEEP, finalRequest)
         } catch (e: Exception) {
+            Log.e(TAG, "Provider balance query failed request=$id error=${e.javaClass.simpleName}")
             store.markUncertain(id, "فشل إرسال استعلام رصيد المورد")
             helper.logSms(providerPhone, query, "provider_balance_query", "failed: ${e.message}")
-            Log.e(TAG, "Failed to query provider balance", e)
         }
         return Result.success()
     }

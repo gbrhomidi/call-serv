@@ -23,7 +23,13 @@ local.properties
 # ملفات التوقيع
 *.jks
 *.keystore
+*.p12
+*.pfx
 debug.keystore
+call-serv.jks
+call-serv.base64.txt
+*.base64.txt
+keystore.properties
 
 # ─── ملاحظة هامة ───
 # app/src/main/assets/.env  ← هذا الملف يُوزع مع التطبيق

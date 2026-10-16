@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -7,7 +9,15 @@ plugins {
 val geminiApiKey = (project.findProperty("GEMINI_API_KEY") as? String).orEmpty()
     .replace("\\", "\\\\")
     .replace("\"", "\\\"")
-val releaseKeystorePath = System.getenv("RELEASE_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
+val localSigningProperties = Properties().apply {
+    val propertiesFile = rootProject.file("keystore.properties")
+    if (propertiesFile.isFile) propertiesFile.inputStream().use { load(it) }
+}
+fun signingValue(environmentName: String, propertyName: String): String =
+    System.getenv(environmentName)?.takeIf { it.isNotBlank() }
+        ?: localSigningProperties.getProperty(propertyName).orEmpty().takeIf { it.isNotBlank() }.orEmpty()
+
+val releaseKeystorePath = signingValue("KEYSTORE_FILE", "storeFile").takeIf { it.isNotBlank() }
 android {
     namespace = "com.aistudio.dieselstationsms.kxmpzq"
     compileSdk = 34
@@ -27,9 +37,9 @@ android {
         if (releaseKeystorePath != null) {
             create("release") {
                 storeFile = file(releaseKeystorePath)
-                storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD").orEmpty()
-                keyAlias = System.getenv("RELEASE_KEY_ALIAS").orEmpty()
-                keyPassword = System.getenv("RELEASE_KEY_PASSWORD").orEmpty()
+                storePassword = signingValue("KEYSTORE_PASSWORD", "storePassword")
+                keyAlias = signingValue("KEY_ALIAS", "keyAlias")
+                keyPassword = signingValue("KEY_PASSWORD", "keyPassword")
             }
         }
     }

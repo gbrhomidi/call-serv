@@ -34,6 +34,7 @@ internal object SmsCommandProcessor {
             val bankName = helper.getSetting("system_bank_name")
             val notice = SmsTextAnalysis.parseBankNotice(body, bankName)
             if (notice == null) {
+                Log.w(TAG, "Bank payment SMS ignored: unrecognized notice format")
                 helper.logSms(sender, body, "bank_notice", "ignored: invalid bank format")
                 return
             }
@@ -126,6 +127,7 @@ internal object SmsCommandProcessor {
     private fun handleProviderMessage(context: Context, sender: String, body: String, store: SmsActivationStore, helper: DatabaseHelper) {
         val request = store.findUniqueProviderRequest(sender, body)
         if (request == null) {
+            Log.w(TAG, "Provider SMS ignored: no unique pending activation request")
             helper.logSms(sender, body, "provider_notice", "ignored: no unique pending request")
             return
         }
@@ -166,12 +168,14 @@ internal object SmsCommandProcessor {
         val attempt = request.optInt("attempt_count", 1).coerceAtLeast(1)
         val providerPhone = SmsTextAnalysis.normalizePhone(request.optString("provider_phone").ifBlank { helper.getSetting("activation_provider_phone") })
         if (providerPhone.isBlank()) {
+            Log.e(TAG, "USSD dispatch blocked request=$requestId reason=provider_phone_missing")
             store.markFailed(requestId, "رقم المورد المؤكد غير مضبوط")
             reply(context, helper, request.optString("customer_phone"), "لم يبدأ التفعيل: رقم هاتف المورد غير مضبوط، ولم يتم خصم أي مبلغ.")
             return
         }
         val command = SmsTextAnalysis.buildUssdCommand(request.optString("activation_command"), request.optString("customer_phone"))
         if (command == null) {
+            Log.e(TAG, "USSD dispatch blocked request=$requestId reason=invalid_activation_template")
             store.markFailed(requestId, "أمر التفعيل الكامل يجب أن يحتوي خانة phone صالحة")
             reply(context, helper, request.optString("customer_phone"), "لم يبدأ التفعيل: أمر الخدمة يجب أن يحتوي (phone) لاستبداله برقمك. لم يتم خصم أي مبلغ.")
             return

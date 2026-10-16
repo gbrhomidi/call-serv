@@ -24,6 +24,116 @@ env:
     -Dorg.gradle.caching=true
 
 jobs:
+  # Signing secrets are never exposed to pull_request jobs, including same-repository PRs.
+  verify-secrets:
+    name: Verify Release Signing Secrets
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/sms-activation-bank-reconciliation')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check required secret names and alias
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          EXPECTED_CERT_SHA256: ${{ secrets.EXPECTED_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing required Actions secret name: ${name}"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::Add the four signing secrets under Settings > Secrets and variables > Actions. Secret values are never printed."
+            exit 1
+          fi
+          if [ "$KEY_ALIAS" != "call-serv" ]; then
+            echo "::error::KEY_ALIAS must be the configured alias 'call-serv'. The secret value is not printed."
+            exit 1
+          fi
+
+          expected="$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+          if [ -n "$expected" ] && [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::EXPECTED_CERT_SHA256 must contain a 64-character SHA-256 fingerprint, with or without colons."
+            exit 1
+          fi
+          if [ "$GITHUB_REF" = "refs/heads/main" ] && [ -z "$expected" ]; then
+            echo "::error::Set EXPECTED_CERT_SHA256 from the first trusted verification summary before producing a production Release APK."
+            exit 1
+          fi
+          echo "All required signing secret names are present; alias format is valid."
+
+      - name: Decode keystore and verify certificate fingerprint
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          EXPECTED_CERT_SHA256: ${{ secrets.EXPECTED_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          key_path="$RUNNER_TEMP/verify-call-serv.keystore"
+          keytool_output="$RUNNER_TEMP/call-serv-keytool.txt"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$key_path"
+          if [ ! -s "$key_path" ]; then
+            echo "::error::Decoded keystore is empty."
+            exit 1
+          fi
+          chmod 600 "$key_path"
+          echo "Decoded keystore size: $(wc -c < "$key_path") bytes"
+
+          if ! keytool -list -v -keystore "$key_path" -storepass:env KEYSTORE_PASSWORD -alias "$KEY_ALIAS" > "$keytool_output" 2>&1; then
+            echo "::error::Keystore could not be opened with the supplied password/alias. Check the secret configuration."
+            exit 1
+          fi
+          printf 'CallServ signing secret validation only.\n' > "$RUNNER_TEMP/call-serv-secret-check.txt"
+          jar --create --file "$RUNNER_TEMP/call-serv-secret-check.jar" -C "$RUNNER_TEMP" call-serv-secret-check.txt
+          if ! jarsigner -keystore "$key_path" -storepass:env KEYSTORE_PASSWORD -keypass:env KEY_PASSWORD \
+              -signedjar "$RUNNER_TEMP/call-serv-secret-check-signed.jar" \
+              "$RUNNER_TEMP/call-serv-secret-check.jar" "$KEY_ALIAS" > /dev/null 2>&1; then
+            echo "::error::Keystore opens, but the private-key password/alias could not sign a temporary test file. Check KEY_PASSWORD and KEY_ALIAS."
+            exit 1
+          fi
+          jarsigner -verify "$RUNNER_TEMP/call-serv-secret-check-signed.jar" > /dev/null
+          fingerprint="$(awk -F': ' '/SHA256:/ { gsub(/[:[:space:]]/, "", $2); print tolower($2); exit }' "$keytool_output")"
+          if [[ ! "$fingerprint" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Could not extract a valid SHA-256 certificate fingerprint."
+            exit 1
+          fi
+
+          expected="$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+          if [ -n "$expected" ] && [ "$fingerprint" != "$expected" ]; then
+            echo "::error::Keystore fingerprint does not match EXPECTED_CERT_SHA256. Refusing to build with a different signing identity."
+            exit 1
+          fi
+
+          formatted="$(printf '%s' "$fingerprint" | sed 's/../&:/g; s/:$//' | tr '[:lower:]' '[:upper:]')"
+          echo "::notice::Verified release certificate SHA-256: $formatted"
+          {
+            echo "### Release Keystore Verification"
+            echo ""
+            echo "| Item | Value |"
+            echo "|---|---|"
+            echo "| Alias | call-serv |"
+            echo "| Certificate SHA-256 | $formatted |"
+            echo "| Keystore size | $(wc -c < "$key_path") bytes |"
+            echo ""
+            if [ -z "$expected" ]; then
+              echo "> Set repository secret EXPECTED_CERT_SHA256 to this fingerprint before a production Release is built."
+            else
+              echo "> Fingerprint matches the pinned EXPECTED_CERT_SHA256 secret."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove verification keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/verify-call-serv.keystore" "$RUNNER_TEMP/call-serv-keytool.txt" "$RUNNER_TEMP/call-serv-secret-check.txt" "$RUNNER_TEMP/call-serv-secret-check.jar" "$RUNNER_TEMP/call-serv-secret-check-signed.jar"
+
   validate:
     name: Validate Android Project
     runs-on: ubuntu-latest
@@ -58,9 +168,7 @@ jobs:
       - name: Compile Debug APK
         run: ./gradlew :app:assembleDebug --no-daemon
 
-      # Feature-branch builds are installable development APKs signed by the
-      # runner's temporary Android debug key. They are for fresh installation;
-      # remove an existing differently-signed app before installing.
+      # Feature-branch APKs use the runner's temporary debug key and are for fresh installs.
       - name: Verify and prepare fresh-install APK from requested branch
         if: github.ref == 'refs/heads/feat/sms-activation-bank-reconciliation' && github.event_name != 'pull_request'
         env:
@@ -75,7 +183,7 @@ jobs:
           AAPT_PATH="$build_tools/aapt" python3 - <<'PY'
           import os, re, subprocess, sys
           output = subprocess.check_output([os.environ["AAPT_PATH"], "dump", "badging", os.environ["APK_PATH"]], text=True)
-          match = re.search(r"^package: name='([^']+)' versionCode='(\d+)' versionName='([^']*)'", output, re.MULTILINE)
+          match = re.search(r"^package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']*)'", output, re.MULTILINE)
           if not match:
               sys.exit("::error::Could not read package/version metadata from the APK.")
           package, version_code, version_name = match.groups()
@@ -103,9 +211,8 @@ jobs:
 
   release:
     name: Build Signed Upgrade APK
-    needs: validate
-    # Only the production branch may access signing secrets. Pull requests and feature pushes validate only.
-    if: github.ref == 'refs/heads/main'
+    needs: [validate, verify-secrets]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -119,39 +226,17 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      - name: Verify signing secrets exist
-        env:
-          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          missing=0
-          for name in RELEASE_KEYSTORE_BASE64 RELEASE_KEYSTORE_PASSWORD RELEASE_KEY_ALIAS RELEASE_KEY_PASSWORD; do
-            if [ -z "${!name}" ]; then
-              echo "::error::Missing required Actions repository secret: ${name}"
-              missing=1
-            fi
-          done
-          if [ "$missing" -ne 0 ]; then
-            echo "::error::Add the existing production signing credentials under Settings > Secrets and variables > Actions. Never commit or paste them into source files."
-            exit 1
-          fi
-          echo "All required release-signing secret names are present."
-
-      - name: Decode release keystore outside workspace
+      - name: Decode production keystore outside workspace
         id: keystore
         env:
-          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           set -euo pipefail
           umask 077
           key_path="$RUNNER_TEMP/call-serv-release.keystore"
-          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$key_path"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$key_path"
           if [ ! -s "$key_path" ]; then
-            echo "::error::Decoded release keystore is empty."
-            rm -f "$key_path"
+            echo "::error::Decoded production keystore is empty."
             exit 1
           fi
           chmod 600 "$key_path"
@@ -159,15 +244,17 @@ jobs:
 
       - name: Build signed Release APK
         env:
-          RELEASE_KEYSTORE_PATH: ${{ steps.keystore.outputs.path }}
-          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: ./gradlew clean :app:assembleRelease --no-daemon -PGEMINI_API_KEY="$GEMINI_API_KEY"
 
-      - name: Locate exactly one signed Release APK
+      - name: Locate and verify signed Release APK
         id: apk
+        env:
+          EXPECTED_CERT_SHA256: ${{ secrets.EXPECTED_CERT_SHA256 }}
         run: |
           set -euo pipefail
           test -d app/build/outputs/apk/release || { echo "::error::Release APK output directory is missing."; exit 1; }
@@ -177,33 +264,31 @@ jobs:
             printf '%s\n' "${apks[@]}"
             exit 1
           fi
-          test -s "${apks[0]}" || { echo "::error::Release APK is empty."; exit 1; }
-          echo "path=${apks[0]}" >> "$GITHUB_OUTPUT"
-
-      - name: Verify signature and Android update identity
-        env:
-          APK_PATH: ${{ steps.apk.outputs.path }}
-        run: |
-          set -euo pipefail
+          apk_path="${apks[0]}"
+          test -s "$apk_path" || { echo "::error::Release APK is empty."; exit 1; }
           build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
-          test -x "$build_tools/apksigner" || { echo "::error::apksigner was not found."; exit 1; }
-          test -x "$build_tools/aapt" || { echo "::error::aapt was not found."; exit 1; }
-          "$build_tools/apksigner" verify --verbose --print-certs "$APK_PATH"
-          AAPT_PATH="$build_tools/aapt" python3 - <<'PY'
+          signer_output="$("$build_tools/apksigner" verify --verbose --print-certs "$apk_path")"
+          printf '%s\n' "$signer_output"
+          actual="$(printf '%s\n' "$signer_output" | awk -F': ' '/Signer #1 certificate SHA-256 digest:/ { print tolower($2); exit }' | tr -d ':[:space:]')"
+          expected="$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+          if [ -z "$expected" ] || [ "$actual" != "$expected" ]; then
+            echo "::error::Signed APK fingerprint does not match EXPECTED_CERT_SHA256."
+            exit 1
+          fi
+          AAPT_PATH="$build_tools/aapt" APK_PATH="$apk_path" python3 - <<'PY'
           import os, re, subprocess, sys
-          apk = os.environ["APK_PATH"]
-          aapt = os.environ["AAPT_PATH"]
-          output = subprocess.check_output([aapt, "dump", "badging", apk], text=True)
-          match = re.search(r"^package: name='([^']+)' versionCode='(\d+)' versionName='([^']*)'", output, re.MULTILINE)
+          output = subprocess.check_output([os.environ["AAPT_PATH"], "dump", "badging", os.environ["APK_PATH"]], text=True)
+          match = re.search(r"^package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']*)'", output, re.MULTILINE)
           if not match:
               sys.exit("::error::Could not read package/version metadata from the APK.")
           package, version_code, version_name = match.groups()
           if package != "com.aistudio.dieselstationsms.kxmpzq":
               sys.exit(f"::error::Unexpected applicationId: {package}")
           if int(version_code) < 301:
-              sys.exit(f"::error::versionCode {version_code} is not greater than the previously published baseline 300.")
-          print(f"Verified update identity: {package}, versionCode={version_code}, versionName={version_name}")
+              sys.exit(f"::error::versionCode {version_code} is below the production baseline.")
+          print(f"Verified production update APK: {package}, versionCode={version_code}, versionName={version_name}")
           PY
+          echo "path=$apk_path" >> "$GITHUB_OUTPUT"
 
       - name: Prepare APK and SHA256 checksum
         env:
@@ -214,12 +299,10 @@ jobs:
           mkdir -p release-artifact
           cp "$APK_PATH" release-artifact/CallServ_SMS_Activation_Release.apk
           (cd release-artifact && sha256sum CallServ_SMS_Activation_Release.apk > SHA256SUMS.txt)
-          test -s release-artifact/CallServ_SMS_Activation_Release.apk
-          test -s release-artifact/SHA256SUMS.txt
           ls -lh release-artifact
           cat release-artifact/SHA256SUMS.txt
 
-      - name: Remove release keystore from runner
+      - name: Remove production keystore from runner
         if: always()
         run: rm -f "$RUNNER_TEMP/call-serv-release.keystore"
 
