@@ -165,17 +165,24 @@ jobs:
       - name: Run Kotlin and Robolectric regression tests
         run: ./gradlew :app:testDebugUnitTest --no-daemon
 
-      - name: Compile Debug APK
-        run: ./gradlew :app:assembleDebug --no-daemon
+      - name: Compile minified fresh-install APK
+        run: ./gradlew :app:assembleMinified --no-daemon
 
-      # Feature-branch APKs use the runner's temporary debug key and are for fresh installs.
+      # Feature-branch APKs are minified, debug-key signed, and for fresh installs only.
       - name: Verify and prepare fresh-install APK from requested branch
         if: github.ref == 'refs/heads/feat/sms-activation-bank-reconciliation' && github.event_name != 'pull_request'
         env:
-          APK_PATH: app/build/outputs/apk/debug/app-debug.apk
+          APK_PATH: app/build/outputs/apk/minified/app-minified.apk
         run: |
           set -euo pipefail
-          test -s "$APK_PATH" || { echo "::error::Debug APK is missing or empty."; exit 1; }
+          test -s "$APK_PATH" || { echo "::error::Minified APK is missing or empty."; exit 1; }
+          apk_bytes="$(stat -c '%s' "$APK_PATH")"
+          max_bytes=$((8 * 1024 * 1024))
+          if [ "$apk_bytes" -gt "$max_bytes" ]; then
+            echo "::error::Minified APK exceeds the 8 MiB size budget (${apk_bytes} bytes). Review dependencies/resources before raising this limit."
+            exit 1
+          fi
+          echo "Optimized APK size: ${apk_bytes} bytes (limit: ${max_bytes} bytes)."
           build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           test -x "$build_tools/apksigner" || { echo "::error::apksigner was not found."; exit 1; }
           test -x "$build_tools/aapt" || { echo "::error::aapt was not found."; exit 1; }

@@ -65,8 +65,8 @@
 
 لإنشاء المفتاح الثابت وإضافة GitHub Secrets دون كشفها، راجع [دليل إعداد Release Keystore](RELEASE_KEYSTORE_SETUP.md).
 
-- سير GitHub Actions يتحقق من واجهة SMS واختبارات Kotlin/Robolectric ويبني Debug. طلبات الدمج تشغّل التحقق فقط ولا ترفع APK.
-- عند الدفع إلى `feat/sms-activation-bank-reconciliation`، تُفحص نسخة Debug الموقّعة ويُرفع artifact باسم `CallServ_SMS_Activation_FreshInstall` مع SHA256 إلى تبويب **Actions** (صالح 14 يوماً). هذا بناء تطوير كامل قابل للتثبيت وموقّع بمفتاح Android debug مؤقت من عامل CI، وليس إصداراً إنتاجياً.
+- سير GitHub Actions يتحقق من واجهة SMS واختبارات Kotlin/Robolectric ويبني نوع `minified` باستخدام R8 وتصغير الموارد. يبقى نوع `debug` العادي قابلاً للتصحيح محلياً. طلبات الدمج تشغّل التحقق فقط ولا ترفع APK.
+- عند الدفع إلى `feat/sms-activation-bank-reconciliation`، تُفحص نسخة `minified` ثم يُرفع artifact باسم `CallServ_SMS_Activation_FreshInstall` مع SHA256 إلى تبويب **Actions** (صالح 14 يوماً). يفشل الفحص إذا تجاوزت APK حد 8 MiB. هذه APK مصغّرة، لكنها موقّعة بمفتاح Android debug مؤقت من عامل CI ومخصصة للتثبيت النظيف/الاختبار، وليست إصداراً إنتاجياً أو تحديثاً مضموناً لنسخة ذات توقيع مختلف.
 - على `main` بعد الدمج، يُبنى Release إنتاجي موقّع ويُرفع artifact باسم `CallServ_SMS_Activation_Release` مع SHA256. أسرار التوقيع لا تتاح لـPull Requests. دفع فرع الميزة يشغّل أيضاً فحصاً للأسرار `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS=call-serv`, و`KEY_PASSWORD`، ويعرض بصمة الشهادة في Summary؛ بعد مطابقتها بمفتاح الإنتاج أضف `EXPECTED_CERT_SHA256` قبل إصدار `main`.
 - ثُبّت `applicationId` الحالي `com.aistudio.dieselstationsms.kxmpzq`، ورُفع `versionCode` إلى 301 (`versionName` 3.0.1) كي يكون أعلى من خط أساس المشروع السابق (300). الإصدارات التالية يجب أن ترفع `versionCode` مرة أخرى.
 - لتحديث النسخة المثبتة دون إزالتها، يجب أن يكون APK موقّعاً بالمفتاح الإنتاجي نفسه، مع بقاء `applicationId` وارتفاع `versionCode`. أما APK الفرع فهي Fresh Install: أزل التطبيق القديم يدوياً أولاً ثم ثبّت الملف الجديد؛ الإزالة تمسح بيانات التطبيق المحلية، كما أن مفتاح debug المؤقت يعني ضرورة الإزالة قبل تثبيت بناء فرع لاحق. لا يستطيع GitHub Actions تنفيذ الإزالة أو التثبيت مباشرة على هاتف المستخدم.
