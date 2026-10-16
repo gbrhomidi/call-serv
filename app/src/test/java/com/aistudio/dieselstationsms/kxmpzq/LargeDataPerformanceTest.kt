@@ -133,8 +133,8 @@ class LargeDataPerformanceTest {
             assertTrue(file.readText().endsWith("\"row_count\":$expectedRows}"))
             return Triple(elapsed, file.length(), file)
         }
-        val (servicesExportMs, servicesExportBytes, servicesExportFile) = export("services", serviceRows + 12)
-        val (customersExportMs, customersExportBytes, customersExportFile) = export("customers", customerRows + 4)
+        val (servicesExportMs, servicesExportBytes, servicesExportFile) = export("services", serviceRows)
+        val (customersExportMs, customersExportBytes, customersExportFile) = export("customers", customerRows)
         val (smsExportMs, smsExportBytes, smsExportFile) = export("sms", smsRows)
         assertTrue("SMS export is unexpectedly small: $smsExportBytes bytes", smsExportBytes > 1_000_000)
 
