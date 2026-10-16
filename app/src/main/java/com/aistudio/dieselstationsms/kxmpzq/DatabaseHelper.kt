@@ -37,8 +37,10 @@ import java.util.concurrent.locks.ReentrantLock
  * 14. audit_log              - سجل التدقيق
  * ═══════════════════════════════════════════════════════════════
  */
-class DatabaseHelper private constructor(context: Context) : 
+class DatabaseHelper private constructor(context: Context) :
     SQLiteOpenHelper(context.applicationContext, DB_NAME, null, VERSION) {
+
+    private val appContext: Context = context.applicationContext
 
     companion object {
         private const val TAG = "DatabaseHelper"
@@ -2184,7 +2186,7 @@ class DatabaseHelper private constructor(context: Context) :
 
     fun getDatabaseSize(): Long {
         return try {
-            val dbFile = context.getDatabasePath(DB_NAME)
+            val dbFile = appContext.getDatabasePath(DB_NAME)
             dbFile.length()
         } catch (e: Exception) {
             0L
@@ -2252,6 +2254,24 @@ class DatabaseHelper private constructor(context: Context) :
 
     fun logSms(phone: String, message: String, type: String, status: String): Long {
         return insertSmsMetric("SMS_${type.uppercase()}_${status.uppercase()}", phone, message.take(200))
+    }
+
+    fun getSmsLogs(): JSONArray {
+        dbLock.lock()
+        return try {
+            readableDatabase.rawQuery(
+                "SELECT * FROM sms_metrics WHERE event_type LIKE 'SMS_%' ORDER BY timestamp DESC LIMIT 500",
+                null
+            ).use { cursor -> cursorToJsonArray(cursor) }
+        } finally { dbLock.unlock() }
+    }
+
+    fun exportAllData(): JSONObject = JSONObject().apply {
+        put("customers", getCustomers())
+        put("services", getServices())
+        put("suppliers", getSuppliers())
+        put("sms_logs", getSmsLogs())
+        put("exported_at", getCurrentDateTime())
     }
 
     // دوال لتوافق مع SmsCustomerResolver

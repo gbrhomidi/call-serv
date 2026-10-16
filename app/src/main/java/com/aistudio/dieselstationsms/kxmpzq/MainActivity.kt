@@ -608,8 +608,8 @@ class MainActivity : AppCompatActivity() {
                     "get_services" -> result.put("data", db.getServices(params.optString("type", null), params.optString("status", null)))
                     "save_service" -> {
                         val id = params.optInt("id", 0)
-                        val saved = if (id > 0) db.updateService(id, params) else db.addService(params)
-                        if (saved <= 0) result.put("success", false).put("error", "قالب USSD غير صالح؛ يجب أن يحتوي على phone")
+                        val saved: Long = if (id > 0) db.updateService(id, params).toLong() else db.addService(params)
+                        if (saved <= 0L) result.put("success", false).put("error", "قالب USSD غير صالح؛ يجب أن يحتوي على phone")
                         else result.put("data", saved)
                     }
                     "get_telecom_providers" -> result.put("data", db.getTelecomProviders(params.optString("status", "active")))
