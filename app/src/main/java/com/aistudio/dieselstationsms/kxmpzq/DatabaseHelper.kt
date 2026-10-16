@@ -755,7 +755,7 @@ class DatabaseHelper private constructor(context: Context) :
                         currentBalance = cursor.getDouble(0)
                         currentDeposit = cursor.getDouble(1)
                     } else {
-                        return@try false
+                        return false
                     }
                 }
 
@@ -792,17 +792,17 @@ class DatabaseHelper private constructor(context: Context) :
                 arrayOf(customerId.toString())
             ).use { cursor ->
                 if (!cursor.moveToFirst()) {
-                    return@try Pair(false, "العميل غير موجود")
+                    return Pair(false, "العميل غير موجود")
                 }
                 val allowCredit = cursor.getInt(0) == 1
                 val creditLimit = cursor.getDouble(1)
                 val currentBalance = cursor.getDouble(2)
 
                 if (!allowCredit) {
-                    return@try Pair(false, "العميل لا يسمح له بالشراء بالأجل")
+                    return Pair(false, "العميل لا يسمح له بالشراء بالأجل")
                 }
                 if (currentBalance + amount > creditLimit) {
-                    return@try Pair(false, "تجاوز الحد الائتماني المسموح به (${creditLimit.toInt()} ريال)")
+                    return Pair(false, "تجاوز الحد الائتماني المسموح به (${creditLimit.toInt()} ريال)")
                 }
                 Pair(true, "مسموح")
             }
@@ -1441,7 +1441,7 @@ class DatabaseHelper private constructor(context: Context) :
                     if (cursor.moveToFirst()) {
                         activationCommand = cursor.getString(0)
                     } else {
-                        return@try -1
+                        return -1
                     }
                 }
 
