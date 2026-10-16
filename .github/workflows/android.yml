@@ -170,7 +170,9 @@ jobs:
 
       # Feature-branch APKs are minified, debug-key signed, and for fresh installs only.
       - name: Verify and prepare fresh-install APK from requested branch
-        if: github.ref == 'refs/heads/feat/sms-activation-bank-reconciliation' && github.event_name != 'pull_request'
+        if: >-
+          (github.ref == 'refs/heads/feat/sms-activation-bank-reconciliation' && github.event_name != 'pull_request') ||
+          (github.event_name == 'pull_request' && github.head_ref == 'feat/sms-activation-bank-reconciliation')
         env:
           APK_PATH: app/build/outputs/apk/minified/app-minified.apk
         run: |
@@ -206,7 +208,9 @@ jobs:
           (cd feature-apk && sha256sum CallServ_SMS_Activation_FreshInstall.apk > SHA256SUMS.txt)
 
       - name: Upload installable APK from feature branch
-        if: github.ref == 'refs/heads/feat/sms-activation-bank-reconciliation' && github.event_name != 'pull_request'
+        if: >-
+          (github.ref == 'refs/heads/feat/sms-activation-bank-reconciliation' && github.event_name != 'pull_request') ||
+          (github.event_name == 'pull_request' && github.head_ref == 'feat/sms-activation-bank-reconciliation')
         uses: actions/upload-artifact@v6
         with:
           name: CallServ_SMS_Activation_FreshInstall
