@@ -185,7 +185,7 @@ class SMSService : Service() {
             }
 
             // معالجة طلبات API
-            val db = DatabaseHelper(this@SMSService)
+            val db = DatabaseHelper.getInstance(this@SMSService)
             val responseJson = JSONObject()
             val params = session.parameters ?: mutableMapOf()
             val action = params["action"]?.firstOrNull() ?: ""
@@ -568,7 +568,7 @@ class SMSService : Service() {
             - عدد العملاء: ${stats.optInt("total_customers", 0)}
             قدم توصية واحدة عملية.
         """.trimIndent()
-        return callGeminiAPI(prompt, DatabaseHelper(this), "insight")
+        return callGeminiAPI(prompt, DatabaseHelper.getInstance(this), "insight")
     }
 
     private fun generateSalesForecast(sales: JSONArray): String {
@@ -580,7 +580,7 @@ class SMSService : Service() {
                 "- ${s.optString("date")}: ${s.optDouble("total_qty", 0.0).toInt()} لتر"
             }}
         """.trimIndent()
-        return callGeminiAPI(prompt, DatabaseHelper(this), "forecast")
+        return callGeminiAPI(prompt, DatabaseHelper.getInstance(this), "forecast")
     }
 
     private fun analyzeCustomerBehavior(customer: JSONObject): String {
@@ -591,7 +591,7 @@ class SMSService : Service() {
             - نقاط الولاء: ${customer.optInt("loyalty_points", 0)}
             - مستوى VIP: ${customer.optInt("vip_level", 0)}
         """.trimIndent()
-        return callGeminiAPI(prompt, DatabaseHelper(this), "analyze")
+        return callGeminiAPI(prompt, DatabaseHelper.getInstance(this), "analyze")
     }
 
     // ========== دوال SMS ==========

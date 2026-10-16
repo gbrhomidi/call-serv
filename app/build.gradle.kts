@@ -2,6 +2,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -12,8 +13,9 @@ android {
         applicationId = "com.aistudio.dieselstationsms.kxmpzq"
         minSdk = 21
         targetSdk = 34
-        versionCode = 1
-        versionName = "3.0"
+        // يجب أن يزيد عن النسخة المثبتة حتى يطلب Android ترقية لا تثبيتًا جديدًا.
+        versionCode = 301
+        versionName = "3.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -42,6 +44,7 @@ android {
 
     buildFeatures {
         viewBinding = true
+        compose = true
     }
 
     packaging {
@@ -57,6 +60,12 @@ dependencies {
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+    implementation("androidx.activity:activity-compose:1.9.3")
+    implementation(platform("androidx.compose:compose-bom:2025.02.00"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("androidx.biometric:biometric:1.1.0") // للمصادقة البيومترية
     implementation("androidx.security:security-crypto:1.1.0-alpha06") // للتشفير

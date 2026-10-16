@@ -1367,6 +1367,28 @@
                     <button type="button" class="btn btn-secondary mt-1" onclick="showAboutModal()">ℹ️ عن التطبيق</button>
                 </form>
             </div>
+            <div class="card">
+                <div class="card-title"><span class="icon">📶</span> شركات الاتصالات</div>
+                <p class="text-muted">رقم مركز الإرسال والبادئات التي تحدد الشركة من رقم العميل.</p>
+                <form onsubmit="saveTelecomProvider(event)">
+                    <input class="form-control" id="telecomName" required placeholder="اسم الشركة: يمن موبايل">
+                    <input class="form-control mt-1" id="telecomSender" required placeholder="رقم مركز USSD">
+                    <input class="form-control mt-1" id="telecomPrefixes" required placeholder="البادئات: 77,78">
+                    <button class="btn btn-primary mt-1" type="submit">حفظ شركة الاتصالات</button>
+                </form>
+                <div id="telecomProvidersList" class="mt-2"></div>
+            </div>
+            <div class="card">
+                <div class="card-title"><span class="icon">🏦</span> البنوك والصرافات والمحافظ</div>
+                <form onsubmit="savePaymentAccount(event)">
+                    <input class="form-control" id="paymentName" required placeholder="اسم البنك أو الصرافة أو المحفظة">
+                    <select class="form-control mt-1" id="paymentType"><option value="bank">بنك</option><option value="exchange">صرافة</option><option value="wallet">محفظة إلكترونية</option></select>
+                    <input class="form-control mt-1" id="paymentAccountNumber" required placeholder="رقم الحساب أو المحفظة">
+                    <input class="form-control mt-1" id="paymentSender" placeholder="رقم مرسل إشعارات التحويل">
+                    <button class="btn btn-primary mt-1" type="submit">حفظ حساب الدفع</button>
+                </form>
+                <div id="paymentAccountsList" class="mt-2"></div>
+            </div>
         </div>
 
         <!-- ============================================================
@@ -1917,6 +1939,43 @@
             localStorage.setItem('business_settings', JSON.stringify(settings));
             applySettings();
             showToast('تم حفظ الإعدادات', 'success');
+        }
+
+        async function saveTelecomProvider(e) {
+            e.preventDefault();
+            const result = await apiCall('save_telecom_provider', {
+                name: document.getElementById('telecomName').value.trim(),
+                sender_number: document.getElementById('telecomSender').value.trim(),
+                prefixes: document.getElementById('telecomPrefixes').value.trim()
+            });
+            if (result.success) { showToast('تم حفظ شركة الاتصالات', 'success'); loadTelecomProviders(); }
+            else showToast(result.error || 'تعذر الحفظ', 'error');
+        }
+
+        async function loadTelecomProviders() {
+            const result = await apiCall('get_telecom_providers');
+            const list = document.getElementById('telecomProvidersList');
+            if (!list || !result.success) return;
+            list.innerHTML = (result.data || []).map(p => `<div class="list-item">${escapeHtml(p.name)} — ${escapeHtml(p.sender_number)} — ${escapeHtml(p.prefixes)}</div>`).join('');
+        }
+
+        async function savePaymentAccount(e) {
+            e.preventDefault();
+            const result = await apiCall('save_payment_account', {
+                name: document.getElementById('paymentName').value.trim(),
+                account_type: document.getElementById('paymentType').value,
+                account_number: document.getElementById('paymentAccountNumber').value.trim(),
+                sender_number: document.getElementById('paymentSender').value.trim()
+            });
+            if (result.success) { showToast('تم حفظ حساب الدفع', 'success'); loadPaymentAccounts(); }
+            else showToast(result.error || 'تعذر الحفظ', 'error');
+        }
+
+        async function loadPaymentAccounts() {
+            const result = await apiCall('get_payment_accounts');
+            const list = document.getElementById('paymentAccountsList');
+            if (!list || !result.success) return;
+            list.innerHTML = (result.data || []).map(p => `<div class="list-item">${escapeHtml(p.name)} — ${escapeHtml(p.account_type)} — ${escapeHtml(p.account_number)}</div>`).join('');
         }
 
         // ============================================================
@@ -2554,6 +2613,8 @@ loadServices();
 loadCustomers();
 loadSuppliers();
 loadSms();
+loadTelecomProviders();
+loadPaymentAccounts();
 
 // إغلاق المودالات بالنقر خارجها
 document.querySelectorAll('.modal-overlay').forEach(el => {

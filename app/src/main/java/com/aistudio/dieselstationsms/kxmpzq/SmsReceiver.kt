@@ -40,7 +40,8 @@ class SmsReceiver : BroadcastReceiver() {
 
         val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent) ?: return
 
-        DatabaseHelper(context).use { db ->
+        val db = DatabaseHelper.getInstance(context)
+        run {
             for (sms in messages) {
                 val sender = sms.displayOriginatingAddress ?: continue
                 val msgBody = sms.displayMessageBody?.lowercase(Locale.getDefault()) ?: continue
@@ -80,6 +81,7 @@ class SmsReceiver : BroadcastReceiver() {
     }
 
     private fun handleMessage(context: Context, db: DatabaseHelper, sender: String, msgBody: String) {
+        if (tryActivateRequestedService(context, db, sender, msgBody)) return
         when {
             msgBody.contains("رصيد") || msgBody.contains("حساب") || msgBody.contains("balance") -> {
                 handleBalanceQuery(context, db, sender)
@@ -109,6 +111,58 @@ class SmsReceiver : BroadcastReceiver() {
                     "شكراً لتواصلك مع محطة أبو أحمد.\nأرسل: استعلام")
             }
         }
+    }
+
+    private fun tryActivateRequestedService(context: Context, db: DatabaseHelper, sender: String, message: String): Boolean {
+        val customer = db.getCustomerByPhone(sender) ?: return false
+        val services = db.getServices(status = "active")
+        var selected: org.json.JSONObject? = null
+        for (i in 0 until services.length()) {
+            val service = services.getJSONObject(i)
+            val code = service.optString("service_code").lowercase(Locale.ROOT)
+            val name = service.optString("service_name").lowercase(Locale.ROOT)
+            if (message.contains(code) || message.contains(name) ||
+                (message.contains("ماكس") && (code.contains("300") || name.contains("300")))) {
+                selected = service
+                break
+            }
+        }
+        val service = selected ?: return false
+        val amount = service.optDouble("price", 0.0)
+        val deposit = customer.optDouble("balance_deposit", 0.0)
+        val debt = customer.optDouble("current_balance", 0.0)
+        val canUseBalance = deposit >= amount
+        val canUseCredit = customer.optInt("allow_credit", 0) == 1 &&
+            debt + amount <= customer.optDouble("credit_limit", 0.0)
+        val paymentMethod = when {
+            canUseBalance -> "balance"
+            canUseCredit -> "credit"
+            else -> {
+                sendReply(context, db, sender, "لا يمكن تفعيل الخدمة: الرصيد أو الحد الائتماني غير كافٍ.")
+                return true
+            }
+        }
+        val activationId = db.activateService(customer.optInt("id"), service.optInt("id"), sender, amount, paymentMethod)
+        if (activationId <= 0) {
+            sendReply(context, db, sender, "تعذر إنشاء طلب التفعيل، حاول لاحقاً.")
+            return true
+        }
+        val command = SmsActivationRules.renderUssd(service.optString("activation_command"), sender)
+        if (command == null) {
+            sendReply(context, db, sender, "تم تسجيل الطلب، لكن قالب التفعيل يحتاج إلى مراجعة الإدارة.")
+            return true
+        }
+        sendReply(context, db, sender, "تم قبول طلب ${service.optString("service_name")}. رقم الطلب: $activationId")
+        val providers = db.getTelecomProviders()
+        for (i in 0 until providers.length()) {
+            val provider = providers.getJSONObject(i)
+            val prefixes = provider.optString("prefixes").split(',', ' ', '|')
+            if (prefixes.any { it.trim() == SmsActivationRules.providerPrefix(sender) }) {
+                sendReply(context, db, provider.optString("sender_number"), command)
+                break
+            }
+        }
+        return true
     }
 
     private fun handleBalanceQuery(context: Context, db: DatabaseHelper, sender: String) {

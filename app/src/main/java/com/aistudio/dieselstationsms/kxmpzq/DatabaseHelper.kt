@@ -1,5 +1,5 @@
 // DatabaseHelper.kt
-package com.aistudio.telecomsms
+package com.aistudio.dieselstationsms.kxmpzq
 
 import android.content.ContentValues
 import android.content.Context
@@ -43,7 +43,7 @@ class DatabaseHelper private constructor(context: Context) :
     companion object {
         private const val TAG = "DatabaseHelper"
         private const val DB_NAME = "telecom_activator.db"
-        const val VERSION = 1
+        const val VERSION = 2
 
         // ==================== Thread-Safe Date Formats ====================
         private val dateFormatThreadLocal = ThreadLocal<SimpleDateFormat>()
@@ -109,8 +109,12 @@ class DatabaseHelper private constructor(context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // سيتم تنفيذ الترحيلات عند الحاجة
         Log.d(TAG, "Upgrading database from $oldVersion to $newVersion")
+        if (oldVersion < 2) {
+            createTelecomProvidersTable(db)
+            createPaymentAccountsTable(db)
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_services_provider ON services(provider)")
+        }
     }
 
     override fun onConfigure(db: SQLiteDatabase) {
@@ -138,7 +142,43 @@ class DatabaseHelper private constructor(context: Context) :
         createSmsOtpVerificationsTable(db)
         createSystemSettingsTable(db)
         createAuditLogTable(db)
+        createTelecomProvidersTable(db)
+        createPaymentAccountsTable(db)
         createIndexes(db)
+    }
+
+    private fun createTelecomProvidersTable(db: SQLiteDatabase) {
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS telecom_providers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                sender_number TEXT NOT NULL UNIQUE,
+                prefixes TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'active',
+                notes TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                is_deleted INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+    }
+
+    private fun createPaymentAccountsTable(db: SQLiteDatabase) {
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS payment_accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                account_type TEXT NOT NULL DEFAULT 'bank',
+                account_number TEXT NOT NULL,
+                sender_number TEXT,
+                status TEXT NOT NULL DEFAULT 'active',
+                notes TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                is_deleted INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(account_type, account_number)
+            )
+        """)
     }
 
     // ==================== 2.1 العملاء ====================
@@ -864,6 +904,8 @@ class DatabaseHelper private constructor(context: Context) :
         dbLock.lock()
         return try {
             val db = writableDatabase
+            val template = data.optString("activation_command", "")
+            if (!SmsActivationRules.validateUssdTemplate(template)) return -1L
             val values = ContentValues().apply {
                 put("service_code", data.optString("service_code", "SRV-${System.currentTimeMillis()}"))
                 put("service_name", data.optString("service_name", ""))
@@ -895,6 +937,8 @@ class DatabaseHelper private constructor(context: Context) :
         dbLock.lock()
         return try {
             val db = writableDatabase
+            if (data.has("activation_command") &&
+                !SmsActivationRules.validateUssdTemplate(data.optString("activation_command"))) return -1
             val values = ContentValues().apply {
                 data.optString("service_code")?.let { put("service_code", it) }
                 data.optString("service_name")?.let { put("service_name", it) }
@@ -971,6 +1015,61 @@ class DatabaseHelper private constructor(context: Context) :
         } finally {
             dbLock.unlock()
         }
+    }
+
+    fun getTelecomProviders(status: String? = "active"): JSONArray {
+        dbLock.lock()
+        return try {
+            val where = if (status == null) "is_deleted = 0" else "is_deleted = 0 AND status = ?"
+            readableDatabase.rawQuery("SELECT * FROM telecom_providers WHERE $where ORDER BY name",
+                if (status == null) null else arrayOf(status)).use { cursor -> cursorToJsonArray(cursor) }
+        } finally { dbLock.unlock() }
+    }
+
+    fun saveTelecomProvider(data: JSONObject): Long {
+        dbLock.lock()
+        return try {
+            val values = ContentValues().apply {
+                put("name", data.optString("name").trim())
+                put("sender_number", SmsActivationRules.normalizePhone(data.optString("sender_number")))
+                put("prefixes", data.optString("prefixes", ""))
+                put("status", data.optString("status", "active"))
+                put("notes", data.optString("notes", ""))
+                put("updated_at", getCurrentDateTime())
+            }
+            val db = writableDatabase
+            val id = data.optInt("id", 0)
+            if (id > 0) db.update("telecom_providers", values, "id = ?", arrayOf(id.toString())).toLong()
+            else db.insertOrThrow("telecom_providers", null, values)
+        } finally { dbLock.unlock() }
+    }
+
+    fun getPaymentAccounts(status: String? = "active"): JSONArray {
+        dbLock.lock()
+        return try {
+            val where = if (status == null) "is_deleted = 0" else "is_deleted = 0 AND status = ?"
+            readableDatabase.rawQuery("SELECT * FROM payment_accounts WHERE $where ORDER BY name",
+                if (status == null) null else arrayOf(status)).use { cursor -> cursorToJsonArray(cursor) }
+        } finally { dbLock.unlock() }
+    }
+
+    fun savePaymentAccount(data: JSONObject): Long {
+        dbLock.lock()
+        return try {
+            val values = ContentValues().apply {
+                put("name", data.optString("name").trim())
+                put("account_type", data.optString("account_type", "bank"))
+                put("account_number", data.optString("account_number").trim())
+                put("sender_number", SmsActivationRules.normalizePhone(data.optString("sender_number")))
+                put("status", data.optString("status", "active"))
+                put("notes", data.optString("notes", ""))
+                put("updated_at", getCurrentDateTime())
+            }
+            val db = writableDatabase
+            val id = data.optInt("id", 0)
+            if (id > 0) db.update("payment_accounts", values, "id = ?", arrayOf(id.toString())).toLong()
+            else db.insertOrThrow("payment_accounts", null, values)
+        } finally { dbLock.unlock() }
     }
 
     /**

@@ -597,6 +597,35 @@ class MainActivity : AppCompatActivity() {
             // يمكن قراءة المفتاح من .env إذا لزم الأمر
             return "not_configured"
         }
+
+        @JavascriptInterface
+        fun execute(action: String, paramsJson: String): String {
+            return try {
+                val params = org.json.JSONObject(paramsJson.ifBlank { "{}" })
+                val db = DatabaseHelper.getInstance(context)
+                val result = org.json.JSONObject().put("success", true)
+                when (action) {
+                    "get_services" -> result.put("data", db.getServices(params.optString("type", null), params.optString("status", null)))
+                    "save_service" -> {
+                        val id = params.optInt("id", 0)
+                        val saved = if (id > 0) db.updateService(id, params) else db.addService(params)
+                        if (saved <= 0) result.put("success", false).put("error", "قالب USSD غير صالح؛ يجب أن يحتوي على phone")
+                        else result.put("data", saved)
+                    }
+                    "get_telecom_providers" -> result.put("data", db.getTelecomProviders(params.optString("status", "active")))
+                    "save_telecom_provider" -> result.put("data", db.saveTelecomProvider(params))
+                    "get_payment_accounts" -> result.put("data", db.getPaymentAccounts(params.optString("status", "active")))
+                    "save_payment_account" -> result.put("data", db.savePaymentAccount(params))
+                    "get_customers" -> result.put("data", db.getCustomers(params.optString("status", null)))
+                    "get_suppliers" -> result.put("data", db.getSuppliers(params.optString("status", null)))
+                    "get_sms" -> result.put("data", db.getSmsLogs())
+                    else -> result.put("success", false).put("error", "أمر غير مدعوم: $action")
+                }
+                result.toString()
+            } catch (e: Exception) {
+                org.json.JSONObject().put("success", false).put("error", e.message ?: "فشل تنفيذ العملية").toString()
+            }
+        }
     }
 
     private fun safeEvaluateJs(script: String) {
