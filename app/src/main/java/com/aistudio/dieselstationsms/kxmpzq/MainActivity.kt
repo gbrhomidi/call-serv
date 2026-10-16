@@ -2,13 +2,17 @@ package com.aistudio.dieselstationsms.kxmpzq
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ClipData
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.print.PrintAttributes
+import android.print.PrintManager
 import android.util.Log
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
@@ -38,8 +42,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import com.aistudio.dieselstationsms.kxmpzq.ui.theme.MyApplicationTheme
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -73,6 +79,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var webView: WebView? = null
+    private val printWebViews = mutableSetOf<WebView>()
     private val isDestroyed = AtomicBoolean(false)
     private val handler = Handler(Looper.getMainLooper())
     private var webViewRetryCount = 0
@@ -157,6 +164,8 @@ class MainActivity : AppCompatActivity() {
                 destroyWebView(wv)
                 webView = null
             }
+            printWebViews.toList().forEach { destroyWebView(it) }
+            printWebViews.clear()
         } catch (e: Exception) {
             Log.e(TAG, "Error during WebView cleanup in onDestroy", e)
         }
@@ -494,6 +503,10 @@ class MainActivity : AppCompatActivity() {
         private val activity: MainActivity
     ) {
         @JavascriptInterface
+        fun execute(action: String, rawParams: String): String =
+            TelecomWebApi(context).execute(action, rawParams)
+
+        @JavascriptInterface
         fun showToast(message: String) {
             if (isDestroyed.get()) return
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
@@ -578,6 +591,90 @@ class MainActivity : AppCompatActivity() {
             // يمكن قراءة المفتاح من .env إذا لزم الأمر
             return "not_configured"
         }
+
+        @JavascriptInterface
+        fun exportJsonFile(filename: String, json: String): Boolean {
+            if (json.length > 5_000_000) return false
+            return try {
+                val safeName = filename.replace(Regex("[^A-Za-z0-9._-]"), "_")
+                    .take(100).ifBlank { "export.json" }
+                val directory = File(context.filesDir, "exports").apply { mkdirs() }
+                val file = File(directory, safeName)
+                file.writeText(json, Charsets.UTF_8)
+                val uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/json"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    clipData = ClipData.newUri(context.contentResolver, safeName, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                activity.runOnUiThread {
+                    if (!isDestroyed.get()) {
+                        activity.startActivity(Intent.createChooser(shareIntent, "حفظ أو مشاركة الملف"))
+                    }
+                }
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to prepare JSON export", e)
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun printPlainText(title: String, body: String): Boolean {
+            if (body.length > 500_000) return false
+            return try {
+                activity.runOnUiThread {
+                    if (isDestroyed.get()) return@runOnUiThread
+                    val printView = WebView(activity)
+                    printWebViews.add(printView)
+                    val safeTitle = title.take(120).ifBlank { "التقرير" }
+                    val escapedTitle = safeTitle.escapeHtml()
+                    val escapedBody = body.escapeHtml()
+                    val html = """
+                        <!doctype html><html dir="rtl"><head><meta charset="utf-8">
+                        <style>body{font-family:sans-serif;padding:24px;direction:rtl;color:#222}
+                        h1{font-size:20px;border-bottom:1px solid #bbb;padding-bottom:10px}
+                        pre{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.8 sans-serif}</style>
+                        </head><body><h1>$escapedTitle</h1><pre>$escapedBody</pre></body></html>
+                    """.trimIndent()
+                    printView.settings.javaScriptEnabled = false
+                    printView.webViewClient = object : WebViewClient() {
+                        override fun onPageFinished(view: WebView, url: String?) {
+                            try {
+                                val manager = activity.getSystemService(Context.PRINT_SERVICE) as PrintManager
+                                manager.print(
+                                    safeTitle,
+                                    view.createPrintDocumentAdapter(safeTitle),
+                                    PrintAttributes.Builder()
+                                        .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                                        .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
+                                        .build()
+                                )
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Unable to start print job", e)
+                                Toast.makeText(activity, "تعذرت تهيئة الطباعة", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                    printView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+                }
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Unable to prepare print page", e)
+                false
+            }
+        }
+
+        private fun String.escapeHtml(): String = replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&#39;")
     }
 
     private fun safeEvaluateJs(script: String) {

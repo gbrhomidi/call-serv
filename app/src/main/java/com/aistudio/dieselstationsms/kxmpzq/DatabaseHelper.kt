@@ -650,20 +650,21 @@ class DatabaseHelper(private val context: Context) :
         return try {
             val db = writableDatabase
             val values = ContentValues().apply {
-                data.optString("full_name")?.let { put("full_name", it) }
-                data.optString("full_name_ar")?.let { put("full_name_ar", it) }
-                data.optString("phone1")?.let { put("phone1", normalizePhone(it)) }
-                data.optString("phone2")?.let { put("phone2", normalizePhone(it)) }
-                data.optString("phone3")?.let { put("phone3", normalizePhone(it)) }
-                data.optDouble("balance_deposit")?.let { put("balance_deposit", it) }
+                if (data.has("full_name") && !data.isNull("full_name")) put("full_name", data.optString("full_name"))
+                if (data.has("full_name_ar") && !data.isNull("full_name_ar")) put("full_name_ar", data.optString("full_name_ar"))
+                if (data.has("phone1") && !data.isNull("phone1")) put("phone1", normalizePhone(data.optString("phone1")))
+                if (data.has("phone2") && !data.isNull("phone2")) put("phone2", normalizePhone(data.optString("phone2")))
+                if (data.has("phone3") && !data.isNull("phone3")) put("phone3", normalizePhone(data.optString("phone3")))
+                if (data.has("balance_deposit") && !data.isNull("balance_deposit")) put("balance_deposit", data.optDouble("balance_deposit"))
                 if (data.has("allow_credit")) put("allow_credit", if (data.optBoolean("allow_credit")) 1 else 0)
-                data.optDouble("credit_limit")?.let { put("credit_limit", it) }
-                data.optDouble("current_balance")?.let { put("current_balance", it) }
-                data.optString("notes")?.let { put("notes", it) }
-                data.optString("details")?.let { put("details", it) }
-                data.optString("status")?.let { put("status", it) }
+                if (data.has("credit_limit") && !data.isNull("credit_limit")) put("credit_limit", data.optDouble("credit_limit"))
+                if (data.has("current_balance") && !data.isNull("current_balance")) put("current_balance", data.optDouble("current_balance"))
+                if (data.has("notes") && !data.isNull("notes")) put("notes", data.optString("notes"))
+                if (data.has("details") && !data.isNull("details")) put("details", data.optString("details"))
+                if (data.has("status") && !data.isNull("status")) put("status", data.optString("status"))
                 put("updated_at", getCurrentDateTime())
             }
+            if (values.size() <= 1) return 0
             val rows = db.update("customers", values, "id = ?", arrayOf(id.toString()))
             if (rows > 0) logAudit("update_customer", "customers", id.toLong(), "تحديث عميل: $id")
             rows
@@ -896,20 +897,21 @@ class DatabaseHelper(private val context: Context) :
         return try {
             val db = writableDatabase
             val values = ContentValues().apply {
-                data.optString("service_code")?.let { put("service_code", it) }
-                data.optString("service_name")?.let { put("service_name", it) }
-                data.optString("service_name_ar")?.let { put("service_name_ar", it) }
-                data.optString("service_type")?.let { put("service_type", it) }
-                data.optDouble("price")?.let { put("price", it) }
-                data.optString("activation_code")?.let { put("activation_code", it) }
-                data.optString("activation_command")?.let { put("activation_command", it) }
-                data.optString("provider")?.let { put("provider", it) }
-                data.optString("description")?.let { put("description", it) }
-                data.optString("notes")?.let { put("notes", it) }
+                if (data.has("service_code") && !data.isNull("service_code")) put("service_code", data.optString("service_code"))
+                if (data.has("service_name") && !data.isNull("service_name")) put("service_name", data.optString("service_name"))
+                if (data.has("service_name_ar") && !data.isNull("service_name_ar")) put("service_name_ar", data.optString("service_name_ar"))
+                if (data.has("service_type") && !data.isNull("service_type")) put("service_type", data.optString("service_type"))
+                if (data.has("price") && !data.isNull("price")) put("price", data.optDouble("price"))
+                if (data.has("activation_code") && !data.isNull("activation_code")) put("activation_code", data.optString("activation_code"))
+                if (data.has("activation_command") && !data.isNull("activation_command")) put("activation_command", data.optString("activation_command"))
+                if (data.has("provider") && !data.isNull("provider")) put("provider", data.optString("provider"))
+                if (data.has("description") && !data.isNull("description")) put("description", data.optString("description"))
+                if (data.has("notes") && !data.isNull("notes")) put("notes", data.optString("notes"))
                 if (data.has("is_active")) put("is_active", if (data.optBoolean("is_active")) 1 else 0)
-                data.optString("status")?.let { put("status", it) }
+                if (data.has("status") && !data.isNull("status")) put("status", data.optString("status"))
                 put("updated_at", getCurrentDateTime())
             }
+            if (values.size() <= 1) return 0
             val rows = db.update("services", values, "id = ?", arrayOf(id.toString()))
             if (rows > 0) logAudit("update_service", "services", id.toLong(), "تحديث خدمة: $id")
             rows
@@ -1103,18 +1105,19 @@ class DatabaseHelper(private val context: Context) :
         return try {
             val db = writableDatabase
             val values = ContentValues().apply {
-                data.optString("name")?.let { put("name", it) }
-                data.optString("name_ar")?.let { put("name_ar", it) }
-                data.optString("phone1")?.let { put("phone1", normalizePhone(it)) }
-                data.optString("phone2")?.let { put("phone2", normalizePhone(it)) }
-                data.optString("phone3")?.let { put("phone3", normalizePhone(it)) }
-                data.optDouble("our_balance")?.let { put("our_balance", it) }
-                data.optDouble("their_balance")?.let { put("their_balance", it) }
-                data.optString("status")?.let { put("status", it) }
-                data.optString("details")?.let { put("details", it) }
-                data.optString("notes")?.let { put("notes", it) }
+                if (data.has("name") && !data.isNull("name")) put("name", data.optString("name"))
+                if (data.has("name_ar") && !data.isNull("name_ar")) put("name_ar", data.optString("name_ar"))
+                if (data.has("phone1") && !data.isNull("phone1")) put("phone1", normalizePhone(data.optString("phone1")))
+                if (data.has("phone2") && !data.isNull("phone2")) put("phone2", normalizePhone(data.optString("phone2")))
+                if (data.has("phone3") && !data.isNull("phone3")) put("phone3", normalizePhone(data.optString("phone3")))
+                if (data.has("our_balance") && !data.isNull("our_balance")) put("our_balance", data.optDouble("our_balance"))
+                if (data.has("their_balance") && !data.isNull("their_balance")) put("their_balance", data.optDouble("their_balance"))
+                if (data.has("status") && !data.isNull("status")) put("status", data.optString("status"))
+                if (data.has("details") && !data.isNull("details")) put("details", data.optString("details"))
+                if (data.has("notes") && !data.isNull("notes")) put("notes", data.optString("notes"))
                 put("updated_at", getCurrentDateTime())
             }
+            if (values.size() <= 1) return 0
             val rows = db.update("suppliers", values, "id = ?", arrayOf(id.toString()))
             if (rows > 0) logAudit("update_supplier", "suppliers", id.toLong(), "تحديث مورد: $id")
             rows
@@ -1138,6 +1141,22 @@ class DatabaseHelper(private val context: Context) :
             val rows = db.update("suppliers", values, "id = ?", arrayOf(supplierId.toString()))
             if (rows > 0) logAudit("balance_update", "suppliers", supplierId.toLong(), "تحديث رصيد: $amount")
             rows > 0
+        } finally {
+            dbLock.unlock()
+        }
+    }
+
+    /** حذف منطقي لمورد */
+    fun deleteSupplier(id: Int): Int {
+        dbLock.lock()
+        return try {
+            val values = ContentValues().apply {
+                put("is_deleted", 1)
+                put("updated_at", getCurrentDateTime())
+            }
+            val rows = writableDatabase.update("suppliers", values, "id = ? AND is_deleted = 0", arrayOf(id.toString()))
+            if (rows > 0) logAudit("delete_supplier", "suppliers", id.toLong(), "حذف مورد: $id")
+            rows
         } finally {
             dbLock.unlock()
         }
@@ -1760,6 +1779,15 @@ class DatabaseHelper(private val context: Context) :
             }
             sql += " ORDER BY timestamp DESC LIMIT 1000"
             db.rawQuery(sql, args.toTypedArray()).use { cursor -> cursorToJsonArray(cursor) }
+        } finally {
+            dbLock.unlock()
+        }
+    }
+
+    fun deleteSmsMetric(id: Int): Int {
+        dbLock.lock()
+        return try {
+            writableDatabase.delete("sms_metrics", "id = ?", arrayOf(id.toString()))
         } finally {
             dbLock.unlock()
         }

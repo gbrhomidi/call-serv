@@ -1658,31 +1658,29 @@
     JAVASCRIPT – التطبيق الكامل مع بيانات وهمية متقدمة
     ============================================================ -->
     <script>
+        let currentServices = [];
+        let currentCustomers = [];
+        let currentSuppliers = [];
+        let currentSms = [];
+
         // ============================================================
-        //  API HELPER – يتواصل مع Kotlin عبر AndroidInterface أو يستخدم بيانات وهمية
+        //  API HELPER – يتواصل حصراً مع قاعدة البيانات الحقيقية داخل Android
         // ============================================================
         async function apiCall(action, params = {}) {
-            // محاولة استخدام AndroidInterface
-            if (typeof window.AndroidInterface !== 'undefined' && window.AndroidInterface) {
-                return new Promise((resolve, reject) => {
-                    try {
-                        const jsonParams = JSON.stringify(params || {});
-                        const result = window.AndroidInterface.execute(action, jsonParams);
-                        try {
-                            const parsed = JSON.parse(result);
-                            resolve(parsed);
-                        } catch (e) {
-                            resolve({ success: true, data: result });
-                        }
-                    } catch (e) {
-                        reject({ success: false, error: e.message || 'فشل الاتصال' });
-                    }
-                });
+            if (!window.AndroidInterface || typeof window.AndroidInterface.execute !== 'function') {
+                return { success: false, error: 'تعذر الاتصال بقاعدة بيانات التطبيق. أغلق التطبيق وافتحه مجدداً.' };
             }
-
-            // Fallback: بيانات وهمية متقدمة (للاختبار دون اتصال)
-            console.warn('AndroidInterface غير متاح، استخدام بيانات وهمية');
-            return mockApiCall(action, params);
+            try {
+                const raw = window.AndroidInterface.execute(action, JSON.stringify(params || {}));
+                const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                if (!parsed || typeof parsed.success !== 'boolean') {
+                    throw new Error('استجابة غير صالحة من قاعدة البيانات');
+                }
+                return parsed;
+            } catch (e) {
+                console.error('Android API failed:', action, e);
+                return { success: false, error: e?.message || 'تعذر تنفيذ العملية' };
+            }
         }
 
         // ============================================================
@@ -1901,6 +1899,11 @@
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
             const navBtn = document.querySelector(`.nav-item[data-screen="${screenId}"]`);
             if (navBtn) navBtn.classList.add('active');
+            if (screenId === 'services') loadServices();
+            else if (screenId === 'customers') loadCustomers();
+            else if (screenId === 'suppliers') loadSuppliers();
+            else if (screenId === 'sms') loadSms();
+            else if (screenId === 'notifications') loadNotifications();
         }
 
         // Filter table
@@ -2091,6 +2094,7 @@
         }
 
         function renderServices(data) {
+            currentServices = Array.isArray(data) ? data : [];
             const tbody = document.getElementById('servicesTable');
             if (!data || data.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">لا توجد خدمات</td></tr>';
@@ -2123,7 +2127,7 @@
         }
 
         function editService(id) {
-            const item = mockServices.find(s => s.id == id);
+            const item = currentServices.find(s => s.id == id);
             if (item) openServiceModal(item);
         }
 
@@ -2176,9 +2180,23 @@
             }
         }
 
-        function exportServices() {
-            showToast('جاري تصدير الخدمات...', 'success');
+        function exportJsonFile(filename, data) {
+            const json = JSON.stringify(data, null, 2);
+            if (window.AndroidInterface && typeof window.AndroidInterface.exportJsonFile === 'function') {
+                const opened = window.AndroidInterface.exportJsonFile(filename, json);
+                showToast(opened ? 'اختر تطبيقاً لحفظ الملف أو مشاركته' : 'تعذر إنشاء ملف التصدير', opened ? 'success' : 'error');
+                return;
+            }
+            const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            showToast('تم تنزيل الملف', 'success');
         }
+
+        function exportServices() { exportJsonFile('services.json', currentServices); }
 
         // ============================================================
         //  CUSTOMERS CRUD
@@ -2195,6 +2213,7 @@
         }
 
         function renderCustomers(data) {
+            currentCustomers = Array.isArray(data) ? data : [];
             const tbody = document.getElementById('customersTable');
             if (!data || data.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">لا يوجد عملاء</td></tr>';
@@ -2235,7 +2254,7 @@
         }
 
         function editCustomer(id) {
-            const item = mockCustomers.find(c => c.id == id);
+            const item = currentCustomers.find(c => c.id == id);
             if (item) openCustomerModal(item);
         }
 
@@ -2292,9 +2311,7 @@
             }
         }
 
-        function exportCustomers() {
-            showToast('جاري تصدير العملاء...', 'success');
-        }
+        function exportCustomers() { exportJsonFile('customers.json', currentCustomers); }
 
         // ============================================================
         //  SUPPLIERS CRUD
@@ -2311,6 +2328,7 @@
         }
 
         function renderSuppliers(data) {
+            currentSuppliers = Array.isArray(data) ? data : [];
             const tbody = document.getElementById('suppliersTable');
             if (!data || data.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">لا يوجد موردين</td></tr>';
@@ -2349,7 +2367,7 @@
         }
 
         function editSupplier(id) {
-            const item = mockSuppliers.find(s => s.id == id);
+            const item = currentSuppliers.find(s => s.id == id);
             if (item) openSupplierModal(item);
         }
 
@@ -2405,9 +2423,7 @@
             }
         }
 
-        function exportSuppliers() {
-            showToast('جاري تصدير الموردين...', 'success');
-        }
+        function exportSuppliers() { exportJsonFile('suppliers.json', currentSuppliers); }
 
         // ============================================================
         //  SMS INBOX
@@ -2424,6 +2440,7 @@
         }
 
         function renderSms(data) {
+            currentSms = Array.isArray(data) ? data : [];
             const tbody = document.getElementById('smsTable');
             if (!data || data.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">لا توجد رسائل</td></tr>';
@@ -2450,7 +2467,7 @@
         }
 
         function viewSms(id) {
-            const sms = mockSms.find(s => s.id == id);
+            const sms = currentSms.find(s => s.id == id);
             if (!sms) return;
             document.getElementById('smsDetailBody').innerHTML = `
                 <div style="margin-bottom:8px;"><strong>المرسل:</strong> ${sms.sender}</div>
@@ -2488,9 +2505,7 @@
             }
         }
 
-        function exportSms() {
-            showToast('جاري تصدير الرسائل...', 'success');
-        }
+        function exportSms() { exportJsonFile('sms_log.json', currentSms); }
 
         // ============================================================
         //  NOTIFICATIONS
@@ -2570,34 +2585,18 @@
         }
 
         function printReport() {
-            const content = document.getElementById('reportModalBody').innerHTML;
-            const win = window.open('', '_blank');
-            win.document.write(`
-                <html dir="rtl"><head><title>تقرير</title>
-                <style>body{font-family:sans-serif;padding:20px;direction:rtl;}
-                table{width:100%;border-collapse:collapse;margin-top:16px;}
-                th,td{border:1px solid #ccc;padding:8px;text-align:right;}
-                th{background:#1a3a6b;color:#fff;}
-</style></head><body>
-    <h2 style="color:#1a3a6b;">التقرير</h2>
-    ${content}
-    <div style="margin-top:20px;font-size:0.8rem;color:#666;">تم إنشاؤه بواسطة النظام</div>
-</body></html>
-`);
-win.document.close();
-setTimeout(() => win.print(), 500);
+            const title = document.getElementById('reportModalTitle').textContent || 'التقرير';
+            const content = document.getElementById('reportModalBody').innerText || '';
+            if (window.AndroidInterface && typeof window.AndroidInterface.printPlainText === 'function') {
+                if (!window.AndroidInterface.printPlainText(title, content)) showToast('تعذرت تهيئة الطباعة على هذا الجهاز', 'error');
+                return;
+            }
+            window.print();
 }
 
 function exportReportData() {
 if (!currentReportData) { showToast('لا توجد بيانات للتصدير', 'warning'); return; }
-const blob = new Blob([JSON.stringify(currentReportData, null, 2)], { type: 'application/json' });
-const url = URL.createObjectURL(blob);
-const a = document.createElement('a');
-a.href = url;
-a.download = `تقرير_${new Date().toISOString().slice(0,10)}.json`;
-a.click();
-URL.revokeObjectURL(url);
-showToast('تم التصدير', 'success');
+exportJsonFile(`report_${new Date().toISOString().slice(0,10)}.json`, currentReportData);
 }
 
 // ============================================================
@@ -2613,24 +2612,14 @@ document.getElementById('aboutModal').classList.add('active');
 async function exportData() {
 showLoading(true);
 try {
-const allData = {
-services: mockServices,
-customers: mockCustomers,
-suppliers: mockSuppliers,
-sms: mockSms,
-notifications: mockNotifications,
-timestamp: new Date().toISOString()
-};
-const blob = new Blob([JSON.stringify(allData, null, 2)], { type: 'application/json' });
-const url = URL.createObjectURL(blob);
-const a = document.createElement('a');
-a.href = url;
-a.download = `backup_${new Date().toISOString().slice(0,10)}.json`;
-a.click();
-URL.revokeObjectURL(url);
-showToast('تم تصدير النسخة الاحتياطية', 'success');
+const result = await apiCall('export_data');
+if (!result.success) throw new Error(result.error || 'تعذر إنشاء النسخة الاحتياطية');
+exportJsonFile(`backup_${new Date().toISOString().slice(0,10)}.json`, {
+    ...result.data,
+    exported_at: new Date().toISOString()
+});
 } catch (e) {
-showToast('فشل التصدير', 'error');
+showToast(e?.message || 'فشل التصدير', 'error');
 } finally {
 showLoading(false);
 }

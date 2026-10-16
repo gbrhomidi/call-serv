@@ -28,6 +28,7 @@ internal fun DatabaseHelper.exportAllData(): JSONObject = JSONObject().apply {
     put("suppliers", getSuppliers())
     put("transfers", getTransfers())
     put("activations", getActivations())
+    put("sms_metrics", getSmsMetrics())
     put("settings", getAllSettings())
 }
 internal fun DatabaseHelper.getSmsLogs(): JSONArray = getSmsMetrics()
