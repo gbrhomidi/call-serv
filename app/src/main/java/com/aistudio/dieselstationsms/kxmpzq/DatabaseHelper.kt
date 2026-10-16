@@ -45,7 +45,7 @@ class DatabaseHelper(private val context: Context) :
     companion object {
         private const val TAG = "DatabaseHelper"
         private const val DB_NAME = "telecom_activator.db"
-        const val VERSION = 2
+        const val VERSION = 3
 
         // ==================== Thread-Safe Date Formats ====================
         private val dateFormatThreadLocal = ThreadLocal<SimpleDateFormat>()
@@ -114,6 +114,12 @@ class DatabaseHelper(private val context: Context) :
         if (oldVersion < 2) {
             createIndexes(db)
             db.delete("system_settings", "setting_key=?", arrayOf("system_bank_expected_balance"))
+        }
+        if (oldVersion < 3) {
+            // Remove only rows shipped by the old demo seed. User-created rows remain intact.
+            db.update("services", ContentValues().apply { put("is_deleted", 1); put("is_active", 0); put("status", "inactive") }, "service_code IN ('TOPUP-500','TOPUP-1000','TOPUP-2000','INTERNET-1GB','INTERNET-5GB','INTERNET-10GB','SMS-100','SMS-500','CALLS-100','CALLS-300','PACKAGE-GOLD','PACKAGE-SILVER')", null)
+            db.update("customers", ContentValues().apply { put("is_deleted", 1); put("status", "inactive") }, "customer_code IN ('CUS-001','CUS-002','CUS-003','CUS-004')", null)
+            db.update("suppliers", ContentValues().apply { put("is_deleted", 1); put("status", "inactive") }, "supplier_code IN ('SUP-001','SUP-002','SUP-003')", null)
         }
         Log.d(TAG, "Upgrading database from $oldVersion to $newVersion")
     }
@@ -487,51 +493,8 @@ class DatabaseHelper(private val context: Context) :
     // ================================================================
 
     private fun insertInitialData(db: SQLiteDatabase) {
-        // ==================== الخدمات الافتراضية ====================
-        val services = listOf(
-            arrayOf("TOPUP-500", "شحن 500 ريال", "500 ريال", "topup", "500.00", "*101*500#", "MTN"),
-            arrayOf("TOPUP-1000", "شحن 1000 ريال", "1000 ريال", "topup", "1000.00", "*101*1000#", "MTN"),
-            arrayOf("TOPUP-2000", "شحن 2000 ريال", "2000 ريال", "topup", "2000.00", "*101*2000#", "MTN"),
-            arrayOf("INTERNET-1GB", "باقة إنترنت 1 جيجا", "1 جيجا إنترنت", "internet", "1500.00", "*105*1#", "MTN"),
-            arrayOf("INTERNET-5GB", "باقة إنترنت 5 جيجا", "5 جيجا إنترنت", "internet", "5000.00", "*105*5#", "MTN"),
-            arrayOf("INTERNET-10GB", "باقة إنترنت 10 جيجا", "10 جيجا إنترنت", "internet", "8000.00", "*105*10#", "MTN"),
-            arrayOf("SMS-100", "باقة رسائل 100", "100 رسالة", "sms", "500.00", "*106*100#", "MTN"),
-            arrayOf("SMS-500", "باقة رسائل 500", "500 رسالة", "sms", "2000.00", "*106*500#", "MTN"),
-            arrayOf("CALLS-100", "باقة مكالمات 100 دقيقة", "100 دقيقة", "call", "1500.00", "*107*100#", "MTN"),
-            arrayOf("CALLS-300", "باقة مكالمات 300 دقيقة", "300 دقيقة", "call", "4000.00", "*107*300#", "MTN"),
-            arrayOf("PACKAGE-GOLD", "باقة الذهبية", "باقة شاملة", "package", "10000.00", "*108*GOLD#", "MTN"),
-            arrayOf("PACKAGE-SILVER", "باقة الفضية", "باقة شاملة", "package", "5000.00", "*108*SILVER#", "MTN")
-        )
-
-        for (s in services) {
-            db.execSQL("""
-                INSERT OR IGNORE INTO services 
-                (service_code, service_name, service_name_ar, service_type, price, activation_command, provider, is_active)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-            """, s)
-        }
-
-        // ==================== عملاء افتراضيون ====================
-        db.execSQL("""
-            INSERT OR IGNORE INTO customers 
-            (customer_code, full_name, phone1, balance_deposit, allow_credit, credit_limit, current_balance, status)
-            VALUES 
-            ('CUS-001', 'أحمد محمد', '777000001', 10000.00, 1, 5000.00, 0.00, 'active'),
-            ('CUS-002', 'خالد علي', '777000002', 5000.00, 1, 3000.00, 0.00, 'active'),
-            ('CUS-003', 'سالم عبدالله', '777000003', 2000.00, 0, 0.00, 0.00, 'active'),
-            ('CUS-004', 'محمد عبدالرحمن', '777000004', 0.00, 1, 2000.00, 1500.00, 'active')
-        """)
-
-        // ==================== موردون افتراضيون ====================
-        db.execSQL("""
-            INSERT OR IGNORE INTO suppliers 
-            (supplier_code, name, phone1, our_balance, their_balance, status)
-            VALUES 
-            ('SUP-001', 'شركة الحوالات اليمنية', '771000001', 50000.00, 0.00, 'active'),
-            ('SUP-002', 'الحوالات السريعة', '772000002', 30000.00, 0.00, 'active'),
-            ('SUP-003', 'تحويلات الخير', '773000003', 20000.00, 0.00, 'active')
-        """)
-
+        // لا تُزرع خدمات أو عملاء أو موردون افتراضيون. تُنشأ هذه السجلات من واجهة الإدارة فقط؛
+        // إبقاء القاعدة فارغة يمنع إرسال خدمات وهمية أو ربط البنك بمورد تجريبي.
         // ==================== إعدادات النظام ====================
         val settings = listOf(
             arrayOf("sms_enabled", "1", "boolean", "sms", "تفعيل نظام SMS"),
@@ -1031,7 +994,7 @@ class DatabaseHelper(private val context: Context) :
         return try {
             val db = readableDatabase
             db.rawQuery(
-                "SELECT * FROM suppliers WHERE phone1 = ? OR phone2 = ? OR phone3 = ? AND is_deleted = 0 LIMIT 1",
+                "SELECT * FROM suppliers WHERE (phone1 = ? OR phone2 = ? OR phone3 = ?) AND is_deleted = 0 LIMIT 1",
                 arrayOf(normalizedPhone, normalizedPhone, normalizedPhone)
             ).use { cursor ->
                 if (cursor.moveToFirst()) cursorToJsonObject(cursor) else null

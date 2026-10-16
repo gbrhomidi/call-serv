@@ -42,6 +42,8 @@ class TelecomWebApiTest {
             .put("name", "اختبار خدمة")
             .put("code", serviceCode)
             .put("price", 125.5)
+            .put("activation_command", "*123*(phone)#")
+            .put("provider", "مشغل اختبار")
             .put("status", "active"))
         assertTrue(service.optBoolean("success"))
         val serviceId = service.getJSONObject("data").getInt("id")
@@ -52,10 +54,13 @@ class TelecomWebApiTest {
             .put("name", "خدمة معدلة")
             .put("code", serviceCode)
             .put("price", 140.0)
+            .put("activation_command", "*123*(phone)#")
+            .put("provider", "مشغل اختبار")
             .put("status", "active"))
         assertTrue(updatedService.optBoolean("success"))
         val storedService = db.getServiceById(serviceId)!!
         assertEquals("*123*(phone)#", storedService.getString("activation_command"))
+        assertEquals("مشغل اختبار", storedService.getString("provider"))
         assertEquals("خدمة معدلة", storedService.getString("service_name"))
 
         val customerPhone = "77${(System.currentTimeMillis() % 10000000).toString().padStart(7, '0')}"

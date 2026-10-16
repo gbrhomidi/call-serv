@@ -1496,6 +1496,25 @@
                         <input type="text" class="form-control" id="serviceCode" required placeholder="BAL001">
                     </div>
                     <div class="form-group">
+                        <label>نوع الخدمة</label>
+                        <select class="form-control" id="serviceType">
+                            <option value="topup">شحن</option>
+                            <option value="internet">إنترنت</option>
+                            <option value="sms">رسائل</option>
+                            <option value="call">مكالمات</option>
+                            <option value="package">باقة</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>شركة الاتصالات</label>
+                        <input type="text" class="form-control" id="serviceProvider" placeholder="اسم الشركة المشغلة">
+                    </div>
+                    <div class="form-group">
+                        <label>قالب أمر USSD *</label>
+                        <input type="text" class="form-control" id="serviceActivationCommand" required placeholder="*123*(phone)#">
+                        <small class="text-muted">استخدم (phone) مكان رقم هاتف العميل؛ لا يُرسل القالب قبل التحقق من الدفع.</small>
+                    </div>
+                    <div class="form-group">
                         <label>الحالة</label>
                         <select class="form-control" id="serviceStatus">
                             <option value="active">مفعلة</option>
@@ -1680,183 +1699,7 @@
         }
 
         // ============================================================
-        //  MOCK DATA – بيانات وهمية شاملة
-        // ============================================================
-        let mockIdCounter = 100;
-
-        const mockServices = [
-            { id: 1, name: 'شحن رصيد', price: 100, code: 'BAL001', status: 'active', details: 'شحن رصيد اتصالات' },
-            { id: 2, name: 'باقة إنترنت 10GB', price: 50, code: 'INT010', status: 'active', details: 'باقة إنترنت 10 جيجابايت' },
-            { id: 3, name: 'باقة رسائل 500', price: 25, code: 'SMS500', status: 'inactive', details: '500 رسالة نصية' },
-            { id: 4, name: 'باقة إنترنت 20GB', price: 80, code: 'INT020', status: 'active', details: 'باقة إنترنت 20 جيجابايت' },
-            { id: 5, name: 'شحن دولي', price: 200, code: 'INTL001', status: 'inactive', details: 'شحن رصيد دولي' }
-        ];
-
-        const mockCustomers = [
-            { id: 1, name: 'أحمد محمد', phone1: '777000001', phone2: '777000002', phone3: '', deposit: 1500,
-                allowCredit: true, creditLimit: 5000, balance: 1200, notes: 'عميل مميز' },
-            { id: 2, name: 'سارة علي', phone1: '777000003', phone2: '', phone3: '777000004', deposit: 2000,
-                allowCredit: false, creditLimit: 0, balance: -500, notes: '' },
-            { id: 3, name: 'خالد حسن', phone1: '777000005', phone2: '777000006', phone3: '777000007', deposit: 800,
-                allowCredit: true, creditLimit: 3000, balance: 2500, notes: '' },
-            { id: 4, name: 'نورة سعيد', phone1: '777000008', phone2: '', phone3: '', deposit: 3000, allowCredit: true,
-                creditLimit: 10000, balance: 500, notes: 'عميل تجاري' }
-        ];
-
-        const mockSuppliers = [
-            { id: 1, name: 'شركة الحوالات الأولى', phone1: '777111111', phone2: '777111112', phone3: '',
-                ourBalance: 10000, theirBalance: 2000, status: 'active', notes: '' },
-            { id: 2, name: 'مؤسسة النقل السريع', phone1: '777222222', phone2: '', phone3: '777222223',
-                ourBalance: 5000, theirBalance: 3000, status: 'active', notes: '' },
-            { id: 3, name: 'شركة الاتصالات اليمنية', phone1: '777333333', phone2: '777333334', phone3: '777333335',
-                ourBalance: 0, theirBalance: 1500, status: 'inactive', notes: '' }
-        ];
-
-        const mockSms = [
-            { id: 1, sender: '777000001', text: 'اريد شحن رصيد 100', time: '2026-07-31 10:15', status: 'processed' },
-            { id: 2, sender: '777000002', text: 'باقة انترنت 10 جيجا', time: '2026-07-31 09:30', status: 'pending' },
-            { id: 3, sender: '777000003', text: 'كم رصيدي؟', time: '2026-07-31 08:45', status: 'processed' },
-            { id: 4, sender: '777000004', text: 'اريد شحن دولي', time: '2026-07-30 17:20', status: 'failed' },
-            { id: 5, sender: '777000005', text: 'طلب باقة رسائل 500', time: '2026-07-30 14:00', status: 'received' },
-            { id: 6, sender: '777000001', text: 'شكراً', time: '2026-07-30 10:10', status: 'processed' }
-        ];
-
-        const mockNotifications = [
-            { id: 1, title: '🔔 تنبيه', message: 'تم استلام رسالة جديدة من 777000001', time: 'منذ 5 دقائق' },
-            { id: 2, title: '⚠️ تحذير', message: 'العميل أحمد محمد تجاوز الحد الائتماني', time: 'منذ ساعة' },
-            { id: 3, title: '📊 تقرير', message: 'تم توليد تقرير المبيعات اليومي', time: 'منذ 3 ساعات' }
-        ];
-
-        // ============================================================
-        //  MOCK API – محاكاة جميع العمليات
-        // ============================================================
-        function mockApiCall(action, params) {
-            return new Promise((resolve) => {
-                setTimeout(() => {
-                    switch (action) {
-                        case 'get_dashboard':
-                            resolve({
-                                success: true,
-                                data: [{
-                                    total_customers: mockCustomers.length,
-                                    total_services: mockServices.length,
-                                    sms_today: mockSms.filter(s => s.time.startsWith(new Date()
-                                        .toISOString().slice(0, 10))).length,
-                                    total_due: 15000
-                                }],
-                                ai_insight: '📈 توقعات اليوم: من المتوقع استقبال 8-12 رسالة، مع 3 طلبات شحن.'
-                            });
-                            break;
-                        case 'get_daily_sms':
-                            resolve({
-                                success: true,
-                                data: [
-                                    { date: '2026-07-25', count: 5 },
-                                    { date: '2026-07-26', count: 8 },
-                                    { date: '2026-07-27', count: 3 },
-                                    { date: '2026-07-28', count: 10 },
-                                    { date: '2026-07-29', count: 6 },
-                                    { date: '2026-07-30', count: 12 },
-                                    { date: '2026-07-31', count: 7 }
-                                ]
-                            });
-                            break;
-                        case 'get_services':
-                            resolve({ success: true, data: mockServices });
-                            break;
-                        case 'save_service':
-                            if (params.id && params.id > 0) {
-                                const idx = mockServices.findIndex(s => s.id == params.id);
-                                if (idx >= 0) mockServices[idx] = { ...mockServices[idx], ...params };
-                            } else {
-                                params.id = ++mockIdCounter;
-                                mockServices.push(params);
-                            }
-                            resolve({ success: true, message: 'تم حفظ الخدمة', data: params });
-                            break;
-                        case 'delete_service':
-                            const idxS = mockServices.findIndex(s => s.id == params.id);
-                            if (idxS >= 0) mockServices.splice(idxS, 1);
-                            resolve({ success: true, message: 'تم الحذف' });
-                            break;
-                        case 'get_customers':
-                            resolve({ success: true, data: mockCustomers });
-                            break;
-                        case 'save_customer':
-                            if (params.id && params.id > 0) {
-                                const idx = mockCustomers.findIndex(c => c.id == params.id);
-                                if (idx >= 0) mockCustomers[idx] = { ...mockCustomers[idx], ...params };
-                            } else {
-                                params.id = ++mockIdCounter;
-                                mockCustomers.push(params);
-                            }
-                            resolve({ success: true, message: 'تم حفظ العميل', data: params });
-                            break;
-                        case 'delete_customer':
-                            const idxC = mockCustomers.findIndex(c => c.id == params.id);
-                            if (idxC >= 0) mockCustomers.splice(idxC, 1);
-                            resolve({ success: true, message: 'تم الحذف' });
-                            break;
-                        case 'get_suppliers':
-                            resolve({ success: true, data: mockSuppliers });
-                            break;
-                        case 'save_supplier':
-                            if (params.id && params.id > 0) {
-                                const idx = mockSuppliers.findIndex(s => s.id == params.id);
-                                if (idx >= 0) mockSuppliers[idx] = { ...mockSuppliers[idx], ...params };
-                            } else {
-                                params.id = ++mockIdCounter;
-                                mockSuppliers.push(params);
-                            }
-                            resolve({ success: true, message: 'تم حفظ المورد', data: params });
-                            break;
-                        case 'delete_supplier':
-                            const idxSup = mockSuppliers.findIndex(s => s.id == params.id);
-                            if (idxSup >= 0) mockSuppliers.splice(idxSup, 1);
-                            resolve({ success: true, message: 'تم الحذف' });
-                            break;
-                        case 'get_sms':
-                            resolve({ success: true, data: mockSms });
-                            break;
-                        case 'delete_sms':
-                            const idxSms = mockSms.findIndex(s => s.id == params.id);
-                            if (idxSms >= 0) mockSms.splice(idxSms, 1);
-                            resolve({ success: true, message: 'تم الحذف' });
-                            break;
-                        case 'get_notifications':
-                            resolve({ success: true, data: mockNotifications });
-                            break;
-                        case 'generate_report':
-                            // تقارير وهمية
-                            let reportData = [];
-                            switch (params.report_type) {
-                                case 'services_summary':
-                                    reportData = mockServices.map(s => ({
-                                        name: s.name,
-                                        price: s.price,
-                                        status: s.status
-                                    }));
-                                    break;
-                                case 'customers_list':
-                                    reportData = mockCustomers.map(c => ({
-                                        name: c.name,
-                                        phone: c.phone1,
-                                        balance: c.balance
-                                    }));
-                                    break;
-                                default:
-                                    reportData = { message: 'تقرير نموذجي', items: mockServices.slice(0, 3) };
-                            }
-                            resolve({ success: true, data: reportData });
-                            break;
-                        default:
-                            resolve({ success: false, error: 'إجراء غير معروف: ' + action });
-                    }
-                }, 300);
-            });
-        }
-
-        // ============================================================
+        // لا توجد بيانات fallback وهمية؛ خارج Android تُعرض حالة الجسر فقط.
         //  CORE FUNCTIONS
         // ============================================================
 
@@ -2116,6 +1959,9 @@
             document.getElementById('serviceName').value = data?.name || '';
             document.getElementById('servicePrice').value = data?.price || '';
             document.getElementById('serviceCode').value = data?.code || '';
+            document.getElementById('serviceType').value = data?.service_type || 'topup';
+            document.getElementById('serviceProvider').value = data?.provider || '';
+            document.getElementById('serviceActivationCommand').value = data?.activation_command || '';
             document.getElementById('serviceStatus').value = data?.status || 'active';
             document.getElementById('serviceDetails').value = data?.details || '';
             document.getElementById('serviceModal').classList.add('active');
@@ -2151,11 +1997,14 @@
                 name: document.getElementById('serviceName').value.trim(),
                 price: parseFloat(document.getElementById('servicePrice').value) || 0,
                 code: document.getElementById('serviceCode').value.trim(),
+                service_type: document.getElementById('serviceType').value,
+                provider: document.getElementById('serviceProvider').value.trim(),
+                activation_command: document.getElementById('serviceActivationCommand').value.trim(),
                 status: document.getElementById('serviceStatus').value,
                 details: document.getElementById('serviceDetails').value.trim()
             };
-            if (!data.name || !data.code) {
-                showToast('الاسم وكود التفعيل مطلوبان', 'warning');
+            if (!data.name || !data.code || !data.activation_command) {
+                showToast('الاسم وكود الخدمة وقالب أمر USSD مطلوبون', 'warning');
                 return;
             }
             showLoading(true);

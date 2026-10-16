@@ -90,7 +90,9 @@ internal class TelecomWebApi(context: Context) {
         val status = input.optString("status", "active")
         require(name.isNotBlank() && code.isNotBlank()) { "اسم الخدمة وكودها مطلوبان" }
         require(name.length <= 200 && code.length <= 20) { "اسم الخدمة أو كودها أطول من المسموح" }
-        require(price.isFinite() && price >= 0) { "سعر الخدمة غير صالح" }
+        require(price.isFinite() && price > 0) { "سعر الخدمة يجب أن يكون أكبر من صفر" }
+        val activationCommand = input.optString("activation_command").trim()
+        require(activationCommand.length in 3..200 && SmsTextAnalysis.buildUssdCommand(activationCommand, "777000001") != null) { "قالب أمر USSD غير صالح؛ استخدم (phone) داخل القالب" }
         require(status == "active" || status == "inactive") { "حالة الخدمة غير صالحة" }
         val values = JSONObject().apply {
             put("service_code", code)
@@ -99,6 +101,8 @@ internal class TelecomWebApi(context: Context) {
             put("service_type", input.optString("service_type", "topup").ifBlank { "topup" })
             put("price", price)
             put("activation_code", code)
+            put("activation_command", input.optString("activation_command").trim())
+            put("provider", input.optString("provider").trim())
             put("description", input.optString("details"))
             put("status", status)
             put("is_active", status == "active")
@@ -191,6 +195,9 @@ internal class TelecomWebApi(context: Context) {
         put("name", row.optString("service_name_ar").ifBlank { row.optString("service_name") })
         put("code", row.optString("service_code"))
         put("details", row.optString("description"))
+        put("service_type", row.optString("service_type"))
+        put("provider", row.optString("provider"))
+        put("activation_command", row.optString("activation_command"))
     }
 
     private fun customerForUi(row: JSONObject) = JSONObject(row.toString()).apply {

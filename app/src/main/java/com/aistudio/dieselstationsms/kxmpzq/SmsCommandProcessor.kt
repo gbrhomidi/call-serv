@@ -91,7 +91,8 @@ internal object SmsCommandProcessor {
         val request = store.createRequest(customer, requestedService, sender)
         if (request.has("error")) {
             helper.logSms(sender, body, "activation_request", "rejected: ${request.optString("error")}")
-            reply(context, helper, sender, "تعذر إنشاء طلب التفعيل لأن إعدادات المورد أو الخدمة غير مكتملة. لم يتم طلب تحويل؛ تواصل مع الدعم.")
+            val reason = request.optString("error").ifBlank { "بيانات الخدمة أو إعدادات التفعيل غير مكتملة" }
+            reply(context, helper, sender, "تعذر إنشاء طلب التفعيل: $reason. لم يتم طلب تحويل؛ تواصل مع الدعم.")
             return
         }
         val amount = request.optLong("amount_cents") / 100.0
@@ -265,9 +266,12 @@ internal object SmsCommandProcessor {
     private fun timeoutWorkName(requestId: Long, attempt: Int) = "sms-activation-timeout-$requestId-$attempt"
 
     private fun helpMessage(services: JSONArray): String {
-        val names = (0 until minOf(services.length(), 8)).mapNotNull { services.optJSONObject(it)?.let { item -> item.optString("service_name_ar").ifBlank { item.optString("service_name") } } }
-        val catalogue = if (names.isEmpty()) "لا توجد خدمات نشطة حالياً." else "الخدمات المتاحة: ${names.joinToString("، ")}."
-        return "الأوامر: «رصيدي» لمعرفة رصيد الحساب، «استعلام» للمساعدة. لطلب خدمة أرسل: «تفعيل اسم الخدمة». $catalogue"
+        val names = (0 until services.length()).mapNotNull { services.optJSONObject(it)?.let { item ->
+            item.optString("service_name_ar").ifBlank { item.optString("service_name") }.trim().takeIf(String::isNotBlank)
+        } }
+        val catalogue = if (names.isEmpty()) "لا توجد خدمات نشطة حالياً." else
+            "الخدمات المتاحة:\n" + names.mapIndexed { index, name -> "${index + 1}. $name" }.joinToString("\n")
+        return "الأوامر: «رصيدي» لمعرفة رصيد الحساب، «استعلام» للمساعدة. لطلب خدمة أرسل: «تفعيل اسم الخدمة».\n$catalogue"
     }
 
     internal fun notifyCustomer(context: Context, helper: DatabaseHelper, phone: String, message: String) =
