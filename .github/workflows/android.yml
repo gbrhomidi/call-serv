@@ -27,7 +27,7 @@ jobs:
   # Signing secrets are never exposed to pull_request jobs, including same-repository PRs.
   verify-secrets:
     name: Verify Release Signing Secrets
-    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/sms-activation-bank-reconciliation')
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -255,8 +255,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: ./gradlew clean :app:assembleRelease --no-daemon -PGEMINI_API_KEY="$GEMINI_API_KEY"
+        run: ./gradlew clean :app:assembleRelease --no-daemon
 
       - name: Locate and verify signed Release APK
         id: apk

@@ -4,9 +4,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /*
- * The checked-in legacy HTTP service references a separate fuel-station schema that is not
- * present in this telecom database. These safe compatibility adapters keep those endpoints
- * read-only/empty rather than inventing successful writes against unrelated tables.
+ * Legacy fuel-station schema adapters retained for source compatibility. They intentionally
+ * return empty/null/false rather than fabricating successful operations against unrelated tables.
  */
 internal fun DatabaseHelper.authenticateUser(username: String, password: String): JSONObject? = null
 internal fun DatabaseHelper.getUserByUsername(username: String): JSONObject? = null

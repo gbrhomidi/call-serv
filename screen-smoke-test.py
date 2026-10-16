@@ -20,6 +20,9 @@ store = read("app/src/main/java/com/aistudio/dieselstationsms/kxmpzq/SmsActivati
 manifest = read("app/src/main/AndroidManifest.xml")
 gradle_build = read("app/build.gradle.kts")
 strings = read("app/src/main/res/values/strings.xml")
+application = read("app/src/main/java/com/aistudio/dieselstationsms/kxmpzq/MyApplication.kt")
+backup_worker = read("app/src/main/java/com/aistudio/dieselstationsms/kxmpzq/BackupWorker.kt")
+compatibility = read("app/src/main/java/com/aistudio/dieselstationsms/kxmpzq/DatabaseLegacyCompatibility.kt")
 
 checks = {
     "installer label and application id identify the telecom activation app": (
@@ -63,6 +66,20 @@ checks = {
     ),
     "activation orders and bank reconciliation persist in SQLite": all(
         token in store for token in ("sms_activation_requests", "fun acceptBankPayment(", "status='awaiting_payment'")
+    ),
+    "NanoHTTPD and the persistent foreground SMS service are absent": (
+        "nanohttpd" not in gradle_build.lower()
+        and ".SMSService" not in manifest
+        and "FOREGROUND_SERVICE" not in manifest
+        and not (ROOT / "app/src/main/java/com/aistudio/dieselstationsms/kxmpzq/SMSService.kt").exists()
+    ),
+    "SMS reception remains broadcast-driven and periodic backup uses WorkManager": (
+        "android.provider.Telephony.SMS_RECEIVED" in manifest
+        and "enqueueUniquePeriodicWork" in application
+        and "auto_backup_work" in application
+        and "PeriodicWorkRequestBuilder<BackupWorker>" in application
+        and all(token in backup_worker for token in ("services", "suppliers", "transfers", "activations", "settings"))
+        and all(token in compatibility for token in ("put(\"services\"", "put(\"suppliers\"", "put(\"transfers\"", "put(\"activations\"", "put(\"settings\""))
     ),
 }
 

@@ -6,9 +6,6 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-val geminiApiKey = (project.findProperty("GEMINI_API_KEY") as? String).orEmpty()
-    .replace("\\", "\\\\")
-    .replace("\"", "\\\"")
 val localSigningProperties = Properties().apply {
     val propertiesFile = rootProject.file("keystore.properties")
     if (propertiesFile.isFile) propertiesFile.inputStream().use { load(it) }
@@ -30,7 +27,6 @@ android {
         versionCode = 301
         versionName = "3.0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
     }
 
     signingConfigs {
@@ -65,9 +61,7 @@ android {
     }
 
     buildFeatures {
-        viewBinding = true
         compose = true
-        buildConfig = true
     }
 
     compileOptions {
@@ -89,15 +83,12 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.activity:activity-compose:1.9.3")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.compose.ui:ui:1.7.6")
     implementation("androidx.compose.ui:ui-graphics:1.7.6")
     implementation("androidx.compose.material3:material3:1.3.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
-    implementation("org.nanohttpd:nanohttpd:2.3.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("androidx.test:core:1.6.1")

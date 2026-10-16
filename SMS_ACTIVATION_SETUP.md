@@ -83,3 +83,12 @@ adb install CallServ_SMS_Activation_FreshInstall.apk
 ```
 
 **تنبيه:** `adb uninstall` يحذف قاعدة البيانات والإعدادات المحلية للتطبيق؛ صدّر أو انسخ بياناتك المهمة قبل التنفيذ. لا تستخدم APK الفرع فوق النسخة الحالية دون الإزالة إذا اختلف مفتاح التوقيع، لأن Android سيرفض التثبيت كتحديث.
+
+
+## إزالة خادم HTTP المحلي وتقليل العمل بالخلفية
+
+- أُزيل خادم `NanoHTTPD` على المنفذ 8080 وخدمة `SMSService` المستمرة؛ لا يفتح التطبيق الآن منفذاً محلياً ولا يحتاج إشعار foreground أو صلاحيات `FOREGROUND_SERVICE`.
+- استقبال SMS ما زال يتم عبر `SmsReceiver` وAndroid `BroadcastReceiver`، لذلك لا يعتمد على إبقاء Activity أو خدمة خادم قيد التشغيل.
+- فحص مهلة التفعيل ومهام النسخ الدورية ما زالت مجدولة عبر `WorkManager`؛ النسخ الدورية أصبحت تُسجّل عند تهيئة التطبيق وبسياسة `KEEP`، بدلاً من تشغيل خدمة دائمة.
+- تم مواءمة تحقق `BackupWorker` مع مخطط JSON الفعلي (`customers`, `services`, `suppliers`, `transfers`, `activations`, `settings`) كي لا يرفض التصدير بسبب أسماء الجداول القديمة.
+- مفتاح Release الإنتاجي لم يتغير: تحقق GitHub Actions السابق فتح المفتاح ووقّع ملفاً مؤقتاً بنجاح. استمر باستخدام المفتاح نفسه و`applicationId` الحالي `com.aistudio.telecomactivation` للإصدارات الإنتاجية على `main`، ولا تُنشئ keystore جديداً.

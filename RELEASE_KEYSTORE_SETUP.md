@@ -88,4 +88,4 @@ git status --short
 sha256sum -c SHA256SUMS.txt
 ```
 
-إذا ظل `applicationId` كما هو (`com.aistudio.dieselstationsms.kxmpzq`)، وظل مفتاح التوقيع نفسه وارتفع `versionCode`، يثبت Android التحديث مع الاحتفاظ بالبيانات. إذا ظهر `signature mismatch` فتوقف ولا تحذف التطبيق قبل معرفة الشهادة المثبتة؛ إزالة التطبيق تمحو بياناته المحلية.
+إذا ظل `applicationId` كما هو (`com.aistudio.telecomactivation`)، وظل مفتاح التوقيع الإنتاجي نفسه وارتفع `versionCode`، يثبت Android التحديث مع الاحتفاظ بالبيانات. لا تُنشئ keystore جديداً ولا تستبدل أسراره؛ تغيير شهادة التوقيع يمنع التحديث. إذا ظهر `signature mismatch` فتوقف ولا تحذف التطبيق قبل معرفة الشهادة المثبتة؛ إزالة التطبيق تمحو بياناته المحلية.

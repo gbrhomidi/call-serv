@@ -3,7 +3,6 @@ package com.aistudio.dieselstationsms.kxmpzq
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
@@ -39,10 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
 import com.aistudio.dieselstationsms.kxmpzq.ui.theme.MyApplicationTheme
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.concurrent.atomic.AtomicBoolean
@@ -57,7 +53,6 @@ import java.util.concurrent.atomic.AtomicBoolean
  * - عرض واجهة المستخدم عبر WebView (تحميل من assets)
  * - توفير جسر (AndroidInterface) للتواصل بين JavaScript و Kotlin
  * - إدارة صلاحيات SMS
- * - تشغيل خدمة الخلفية (SMSService)
  * - معالجة الأخطاء وإعادة المحاولة لتحميل WebView
  * - دعم الوضع الليلي/النهاري
  * ═══════════════════════════════════════════════════════════════
@@ -67,7 +62,6 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "MainActivity"
         private const val PERMISSION_REQUEST_CODE = 1001
-        private const val SERVICE_START_DELAY_MS = 1000L
         private const val WEBVIEW_LOAD_DELAY_MS = 2000L
         private const val WEBVIEW_INITIAL_RETRY_DELAY_MS = 1000L
         private const val WEBVIEW_MAX_RETRY_DELAY_MS = 15000L
@@ -115,14 +109,6 @@ class MainActivity : AppCompatActivity() {
         // طلب صلاحيات SMS
         requestAllPermissions()
 
-        // بدء خدمة SMS بعد تأخير بسيط
-        lifecycleScope.launch {
-            delay(SERVICE_START_DELAY_MS)
-            if (!isDestroyed.get()) {
-                startSMSService()
-            }
-        }
-
         // إعداد واجهة Compose مع WebView
         try {
             setContent {
@@ -164,7 +150,6 @@ class MainActivity : AppCompatActivity() {
         Log.d(TAG, "onDestroy called")
         isDestroyed.set(true)
         handler.removeCallbacksAndMessages(null)
-        stopSMSService()
 
         try {
             val wv = webView
@@ -197,11 +182,6 @@ class MainActivity : AppCompatActivity() {
         }
         if (!isPermissionGranted(Manifest.permission.READ_SMS)) {
             permissions.add(Manifest.permission.READ_SMS)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (!isPermissionGranted(Manifest.permission.POST_NOTIFICATIONS)) {
-                permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-            }
         }
 
         if (permissions.isNotEmpty()) {
@@ -250,38 +230,7 @@ class MainActivity : AppCompatActivity() {
 
     // ============================================================
     // تشغيل وإيقاف خدمة SMS
-    // ============================================================
-
-    private fun startSMSService() {
-        if (isDestroyed.get()) {
-            Log.w(TAG, "Activity is destroyed, not starting service")
-            return
-        }
-        try {
-            val intent = Intent(this, SMSService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(intent)
-            } else {
-                startService(intent)
-            }
-            Log.d(TAG, "SMSService started successfully")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error starting SMSService", e)
-            Toast.makeText(this, "فشل في بدء الخدمة", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun stopSMSService() {
-        try {
-            val intent = Intent(this, SMSService::class.java)
-            stopService(intent)
-            Log.d(TAG, "SMSService stopped")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error stopping SMSService", e)
-        }
-    }
-
-    // ============================================================
+    // WebView – التحميل والإدارة
     // WebView – التحميل والإدارة
     // ============================================================
 
