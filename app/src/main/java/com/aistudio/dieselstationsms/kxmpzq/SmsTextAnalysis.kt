@@ -7,10 +7,20 @@ import java.math.RoundingMode
 
 /** Deterministic SMS parsing: ambiguous messages are deliberately not auto-executed. */
 internal object SmsTextAnalysis {
-    private val bankAmountPattern = Regex("لكم\\s*[:：]?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)", RegexOption.IGNORE_CASE)
+    private val bankAmountPattern = Regex(
+        "لكم\\s*[:：]?\\s*([0-9][0-9,٬]*(?:[.٫][0-9]+)?)(?![0-9.,٬٫])",
+        RegexOption.IGNORE_CASE
+    )
     private val accountPattern = Regex("من\\s*حساب\\s*[:：]?\\s*(.+?)(?=\\s+لكم(?:\\s|[:：]))", RegexOption.IGNORE_CASE)
-    private val successPattern = Regex("(تم\\s*(التفعيل|التفعيل بنجاح|بن?جاح)|نجاح|successful|success|activated)", RegexOption.IGNORE_CASE)
-    private val failurePattern = Regex("(فشل|غير\\s*كاف|لم\\s*يتم|مرفوض|failed|insufficient)", RegexOption.IGNORE_CASE)
+    private val successPattern = Regex(
+        "(تم\\s*(التفعيل|التفعيل بنجاح|تفعيل|بن?جاح)|نجاح|successful|success|activated)",
+        RegexOption.IGNORE_CASE
+    )
+    private val failurePattern = Regex(
+        "(فشل|غير\\s*(كاف|ناجح|مفعل)|لم\\s*(يتم|ينجح|تنجح)|لا\\s*(يوجد\\s*)?(نجاح|تفعيل)|ما\\s*تم\\s*التفعيل|تعذر|مرفوض|ملغي|failed|failure|unsuccessful|not\\s+(a\\s+)?(success(ful)?|activated|completed|approved)|insufficient|declined|rejected|error)",
+        RegexOption.IGNORE_CASE
+    )
+    private val amountTokenPattern = Regex("(?<![0-9,٬.٫\\-])(?:[0-9]{1,3}(?:[,٬][0-9]{3})+|[0-9]+)(?:[.٫][0-9]+)?(?![0-9,٬.٫\\-])")
 
     fun normalizeDigits(value: String): String = buildString(value.length) {
         value.forEach { c ->
@@ -44,19 +54,27 @@ internal object SmsTextAnalysis {
         return command
     }
 
-    fun toCents(raw: String): Long? = try {
-        BigDecimal(normalizeDigits(raw).replace(",", "").replace("٬", "").replace("٫", ".").trim())
-            .setScale(2, RoundingMode.UNNECESSARY).movePointRight(2).longValueExact()
-    } catch (_: Exception) { null }
+    fun toCents(raw: String): Long? {
+        val normalized = normalizeDigits(raw).trim()
+        val validMoney = Regex("^(?:[0-9]+|[0-9]{1,3}(?:[,٬][0-9]{3})+)(?:[.٫][0-9]{1,2})?$")
+        if (!validMoney.matches(normalized)) return null
+        return try {
+            BigDecimal(normalized.replace(",", "").replace("٬", "").replace("٫", "."))
+                .setScale(2, RoundingMode.UNNECESSARY).movePointRight(2).longValueExact()
+        } catch (_: Exception) { null }
+    }
+
+    fun lastMoneyCents(body: String): Long? = amountTokenPattern.findAll(normalizeDigits(body))
+        .lastOrNull()?.value?.let(::toCents)
 
     data class BankNotice(val accountName: String, val amountCents: Long, val newBalanceCents: Long)
 
     fun parseBankNotice(body: String, expectedBankName: String): BankNotice? {
         val bank = normalize(expectedBankName)
         val normalizedBody = normalize(body)
-        if (bank.isBlank() || !normalizedBody.contains(bank)) return null
+        if (bank.isBlank() || !(" $normalizedBody ").contains(" $bank ")) return null
         val amountMatches = bankAmountPattern.findAll(normalizeDigits(body)).toList()
-        if (amountMatches.size < 2) return null
+        if (amountMatches.size != 2) return null
         val amount = toCents(amountMatches.first().groupValues[1]) ?: return null
         val total = toCents(amountMatches.last().groupValues[1]) ?: return null
         if (amount <= 0 || total <= 0) return null
@@ -66,7 +84,11 @@ internal object SmsTextAnalysis {
         return BankNotice(account, amount, total)
     }
 
-    fun isSuccessMessage(body: String): Boolean = successPattern.containsMatchIn(normalizeDigits(body))
+    fun isSuccessMessage(body: String): Boolean {
+        val message = normalizeDigits(body)
+        return !failurePattern.containsMatchIn(message) && successPattern.containsMatchIn(message)
+    }
+
     fun isFailureMessage(body: String): Boolean = failurePattern.containsMatchIn(normalizeDigits(body))
 
     /** Returns exactly one best match; no service is selected when the top score is tied. */

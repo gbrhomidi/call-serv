@@ -80,9 +80,18 @@ internal object SmsCommandProcessor {
             return
         }
 
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "Activation request rejected before payment: USSD platform or permission unavailable")
+            helper.logSms(sender, body, "activation_request", "rejected: USSD unavailable; no payment requested")
+            reply(context, helper, sender, "تعذر بدء التفعيل الآلي على هذا الجهاز لغياب دعم USSD أو صلاحية الاتصال. لم يُنشأ طلب ولم يُطلب منك التحويل؛ تواصل مع الدعم.")
+            return
+        }
+
         val request = store.createRequest(customer, requestedService, sender)
         if (request.has("error")) {
-            reply(context, helper, sender, "تعذر إنشاء الطلب حالياً. يرجى المحاولة لاحقاً أو التواصل مع الدعم.")
+            helper.logSms(sender, body, "activation_request", "rejected: ${request.optString("error")}")
+            reply(context, helper, sender, "تعذر إنشاء طلب التفعيل لأن إعدادات المورد أو الخدمة غير مكتملة. لم يتم طلب تحويل؛ تواصل مع الدعم.")
             return
         }
         val amount = request.optLong("amount_cents") / 100.0
@@ -92,7 +101,7 @@ internal object SmsCommandProcessor {
         if (duplicate) {
             val statusText = when (request.optString("status")) {
                 "awaiting_payment" -> "الطلب السابق بانتظار التحويل؛ لن ننشئ طلباً مكرراً."
-                "pending_provider", "reconciling" -> "الطلب السابق قيد المعالجة أو التحقق؛ لا تعاود إرساله الآن."
+                "pending_provider", "reconciling", "retry_ready" -> "الطلب السابق قيد المعالجة أو التحقق؛ لا تعاود إرساله الآن."
                 "uncertain" -> "الطلب السابق قيد المراجعة اليدوية؛ لم نكرر التفعيل منعاً للخصم المزدوج."
                 else -> "يوجد طلب سابق لهذه الخدمة خلال آخر 24 ساعة."
             }
@@ -114,7 +123,9 @@ internal object SmsCommandProcessor {
         val bankName = helper.getSetting("system_bank_name").trim()
         val accountName = helper.getSetting("system_bank_account_name").trim()
         val bankNumber = helper.getSetting("system_bank_sender_phone").trim()
-        if (bankName.isBlank() || accountName.isBlank() || bankNumber.isBlank() || SmsTextAnalysis.toCents(helper.getSetting("system_bank_expected_balance")) == null) {
+        val expectedBankBalance = SmsTextAnalysis.toCents(helper.getSetting("system_bank_expected_balance"))
+        if (bankName.isBlank() || accountName.isBlank() || bankNumber.isBlank() || expectedBankBalance == null || expectedBankBalance < 0L) {
+            store.markFailed(request.getLong("id"), "إعدادات الحساب البنكي غير مكتملة؛ لم يُطلب الدفع")
             reply(context, helper, sender, "$serviceName تكلفتها ${formatMoney(amount)} ريال. لا يتوفر إعداد مكتمل للتحويل البنكي؛ يرجى التواصل مع الدعم لإتمام الطلب. لم يتم تفعيل الخدمة.")
             return
         }
@@ -134,8 +145,8 @@ internal object SmsCommandProcessor {
         val requestId = request.optLong("id")
         if (SmsTextAnalysis.isFailureMessage(body)) {
             Log.w(TAG, "Provider reported activation failure request=$requestId")
-            store.markFailed(requestId, body)
-            reply(context, helper, request.optString("customer_phone"), "تعذر تفعيل ${request.optString("service_name")}. لم نسجل التفعيل كناجح؛ يرجى التواصل مع الدعم.")
+            activationFailure(context, helper, store, request, body, "أفاد المورد بفشل عملية التفعيل")
+            helper.logSms(sender, body, "provider_notice", "activation failure reported")
             return
         }
         if (SmsTextAnalysis.isSuccessMessage(body)) {
@@ -167,37 +178,33 @@ internal object SmsCommandProcessor {
         val helper = DatabaseHelper.getInstance(context)
         val attempt = request.optInt("attempt_count", 1).coerceAtLeast(1)
         val providerPhone = SmsTextAnalysis.normalizePhone(request.optString("provider_phone").ifBlank { helper.getSetting("activation_provider_phone") })
-        if (providerPhone.isBlank()) {
+        if (providerPhone.length < 7) {
             Log.e(TAG, "USSD dispatch blocked request=$requestId reason=provider_phone_missing")
-            store.markFailed(requestId, "رقم المورد المؤكد غير مضبوط")
-            reply(context, helper, request.optString("customer_phone"), "لم يبدأ التفعيل: رقم هاتف المورد غير مضبوط، ولم يتم خصم أي مبلغ.")
+            activationFailure(context, helper, store, request, "رقم المورد غير مضبوط", "تعذر بدء التفعيل بسبب نقص إعداد رقم المورد")
             return
         }
         val command = SmsTextAnalysis.buildUssdCommand(request.optString("activation_command"), request.optString("customer_phone"))
         if (command == null) {
             Log.e(TAG, "USSD dispatch blocked request=$requestId reason=invalid_activation_template")
-            store.markFailed(requestId, "أمر التفعيل الكامل يجب أن يحتوي خانة phone صالحة")
-            reply(context, helper, request.optString("customer_phone"), "لم يبدأ التفعيل: أمر الخدمة يجب أن يحتوي (phone) لاستبداله برقمك. لم يتم خصم أي مبلغ.")
+            activationFailure(context, helper, store, request, "قالب USSD غير صالح", "تعذر بدء التفعيل بسبب خطأ في قالب أمر الخدمة")
             return
         }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             Log.e(TAG, "USSD dispatch blocked request=$requestId reason=android_version_below_26")
-            store.markFailed(requestId, "USSD غير متاح: Android 8+ وصلاحية الاتصال مطلوبان")
-            reply(context, helper, request.optString("customer_phone"), "تعذر إرسال أمر USSD تلقائياً. لم يتم خصم أو تسجيل التفعيل؛ تحقق من إصدار Android وصلاحية الاتصال.")
+            activationFailure(context, helper, store, request, "إصدار Android لا يدعم USSD المطلوب", "تعذر بدء التفعيل تلقائياً على إصدار Android هذا")
             return
         }
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
             Log.e(TAG, "USSD dispatch blocked request=$requestId reason=call_phone_permission_missing")
-            store.markFailed(requestId, "USSD غير متاح: Android 8+ وصلاحية الاتصال مطلوبان")
-            reply(context, helper, request.optString("customer_phone"), "تعذر إرسال أمر USSD تلقائياً. لم يتم خصم أو تسجيل التفعيل؛ تحقق من إصدار Android وصلاحية الاتصال.")
+            activationFailure(context, helper, store, request, "صلاحية الاتصال غير متاحة", "تعذر بدء التفعيل بسبب غياب صلاحية الاتصال")
             return
         }
         if (!store.markDispatching(requestId, attempt)) {
             Log.w(TAG, "USSD dispatch skipped request=$requestId reason=invalid_request_state")
             return
         }
-        scheduleTimeout(context, requestId, attempt)
         try {
+            scheduleTimeout(context, requestId, attempt)
             val telephony = context.getSystemService(TelephonyManager::class.java)
                 ?: throw IllegalStateException("TelephonyManager unavailable")
             Log.i(TAG, "USSD dispatch initiated request=$requestId attempt=$attempt commandLength=${command.length}")
@@ -208,16 +215,44 @@ internal object SmsCommandProcessor {
                 }
                 override fun onReceiveUssdResponseFailed(telephonyManager: TelephonyManager, ussdRequest: String, failureCode: Int) {
                     Log.e(TAG, "Carrier USSD request failed request=$requestId failureCode=$failureCode")
-                    store.markFailed(requestId, "USSD request failed with code $failureCode")
-                    WorkManager.getInstance(context).cancelUniqueWork(timeoutWorkName(requestId, attempt))
-                    reply(context, helper, request.optString("customer_phone"), "فشل إرسال أمر التفعيل عبر الشبكة. لم نسجل الخدمة كناجحة؛ يرجى المحاولة لاحقاً.")
+                    cancelTimeoutSafely(context, requestId, attempt)
+                    activationFailure(context, helper, store, request, "USSD request failed with code $failureCode", "تعذر تأكيد التفعيل عبر شبكة المشغل")
                 }
             }, Handler(Looper.getMainLooper()))
         } catch (e: Exception) {
-            store.markFailed(requestId, "تعذر إرسال USSD: ${e.javaClass.simpleName}")
-            WorkManager.getInstance(context).cancelUniqueWork(timeoutWorkName(requestId, attempt))
-            reply(context, helper, request.optString("customer_phone"), "تعذر إرسال أمر التفعيل عبر الشبكة. لم يتم تسجيل التفعيل كناجح.")
+            cancelTimeoutSafely(context, requestId, attempt)
+            activationFailure(context, helper, store, request, "تعذر إرسال USSD: ${e.javaClass.simpleName}", "تعذر تأكيد التفعيل عبر شبكة المشغل")
             Log.e(TAG, "USSD dispatch failed request=$requestId error=${e.javaClass.simpleName}")
+        }
+    }
+
+    private fun activationFailure(
+        context: Context,
+        helper: DatabaseHelper,
+        store: SmsActivationStore,
+        request: JSONObject,
+        reason: String,
+        customerDetail: String
+    ) {
+        val requestId = request.optLong("id")
+        val customerPhone = request.optString("customer_phone")
+        val serviceName = request.optString("service_name", "الخدمة")
+        if (request.optString("payment_method") == "bank") {
+            store.markUncertain(requestId, reason)
+            reply(context, helper, customerPhone,
+                "تم التحقق من تحويلك مقابل $serviceName، لكن $customerDetail. لا تعِد التحويل أو الطلب؛ تواصل مع الدعم لمراجعة الحالة.")
+        } else {
+            store.markFailed(requestId, reason)
+            reply(context, helper, customerPhone,
+                "$serviceName: $customerDetail. لم نضف أي مبلغ إلى رصيدك الآجل؛ تواصل مع الدعم.")
+        }
+    }
+
+    private fun cancelTimeoutSafely(context: Context, requestId: Long, attempt: Int) {
+        try {
+            WorkManager.getInstance(context).cancelUniqueWork(timeoutWorkName(requestId, attempt))
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to cancel USSD timeout request=$requestId error=${e.javaClass.simpleName}")
         }
     }
 
@@ -257,11 +292,7 @@ internal object SmsCommandProcessor {
         }
     }
 
-    private fun extractLastBalance(body: String): Long? {
-        val money = Regex("[0-9][0-9,]*(?:\\.[0-9]{1,2})?")
-        val matches = money.findAll(SmsTextAnalysis.normalizeDigits(body)).toList()
-        return matches.lastOrNull()?.value?.let(SmsTextAnalysis::toCents)
-    }
+    private fun extractLastBalance(body: String): Long? = SmsTextAnalysis.lastMoneyCents(body)
 
     private fun formatMoney(amount: Double): String = java.math.BigDecimal.valueOf(amount).setScale(2, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
 }

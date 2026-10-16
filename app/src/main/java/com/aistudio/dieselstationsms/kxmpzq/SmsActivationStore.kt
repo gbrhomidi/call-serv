@@ -31,15 +31,21 @@ internal class SmsActivationStore(context: Context) {
     fun createRequest(customer: JSONObject, service: JSONObject, phone: String): JSONObject {
         val customerId = customer.optInt("id")
         val serviceId = service.optInt("id")
-        val amountCents = java.math.BigDecimal.valueOf(service.optDouble("price"))
-            .movePointRight(2).setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()
+        val amountCents = decimalToCents(service.optDouble("price")) ?: 0L
+        val normalizedPhone = SmsTextAnalysis.normalizePhone(phone)
+        val command = service.optString("activation_command", "").trim()
+        val providerPhone = SmsTextAnalysis.normalizePhone(helper.getSetting("activation_provider_phone"))
         val now = System.currentTimeMillis()
         val result = JSONObject()
         if (customerId <= 0 || serviceId <= 0 || amountCents <= 0) return result.put("error", "بيانات الطلب غير صالحة")
+        if (normalizedPhone.length < 7 || providerPhone.length < 7 ||
+            SmsTextAnalysis.buildUssdCommand(command, normalizedPhone) == null) {
+            return result.put("error", "بيانات التفعيل أو رقم المورد غير مكتمل؛ لم يُنشأ طلب")
+        }
         db.beginTransaction()
         try {
             db.rawQuery(
-                "SELECT * FROM sms_activation_requests WHERE customer_id=? AND service_id=? AND status IN ('awaiting_payment','pending_provider','reconciling','uncertain') AND created_at>? ORDER BY created_at DESC LIMIT 1",
+                "SELECT * FROM sms_activation_requests WHERE customer_id=? AND service_id=? AND (status IN ('pending_provider','reconciling','retry_ready','uncertain') OR (status='awaiting_payment' AND created_at>?)) ORDER BY created_at DESC LIMIT 1",
                 arrayOf(customerId.toString(), serviceId.toString(), (now - 24L * 60 * 60 * 1000).toString())
             ).use { cursor ->
                 if (cursor.moveToFirst()) {
@@ -50,22 +56,30 @@ internal class SmsActivationStore(context: Context) {
             }
 
             val allowCredit = customer.optInt("allow_credit", 0) == 1
-            val limitCents = (customer.optDouble("credit_limit") * 100.0).toLong()
-            val dueCents = (customer.optDouble("current_balance") * 100.0).toLong()
+            val limitCents = decimalToCents(customer.optDouble("credit_limit")) ?: 0L
+            val dueCents = decimalToCents(customer.optDouble("current_balance")) ?: Long.MAX_VALUE
             val reservedCents = db.rawQuery(
-                "SELECT COALESCE(SUM(amount_cents),0) FROM sms_activation_requests WHERE customer_id=? AND payment_method='credit' AND status IN ('pending_provider','reconciling','uncertain')",
+                "SELECT COALESCE(SUM(amount_cents),0) FROM sms_activation_requests WHERE customer_id=? AND payment_method='credit' AND status IN ('pending_provider','reconciling','retry_ready','uncertain')",
                 arrayOf(customerId.toString())
             ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else 0L }
-            val isCredit = allowCredit && limitCents > 0 && dueCents + reservedCents + amountCents <= limitCents
+            val projectedDebt = try { Math.addExact(Math.addExact(dueCents, reservedCents), amountCents) } catch (_: ArithmeticException) { null }
+            val isCredit = allowCredit && limitCents > 0 && projectedDebt != null && projectedDebt <= limitCents
             val paymentMethod = if (isCredit) "credit" else "bank"
             val status = if (isCredit) "pending_provider" else "awaiting_payment"
-            val command = service.optString("activation_command", "").trim()
-            val providerPhone = helper.getSetting("activation_provider_phone")
+            if (!isCredit) {
+                val bankName = helper.getSetting("system_bank_name").trim()
+                val accountName = helper.getSetting("system_bank_account_name").trim()
+                val bankSender = SmsTextAnalysis.normalizePhone(helper.getSetting("system_bank_sender_phone"))
+                val expectedBalance = SmsTextAnalysis.toCents(helper.getSetting("system_bank_expected_balance"))
+                if (bankName.isBlank() || accountName.isBlank() || bankSender.length < 7 || expectedBalance == null || expectedBalance < 0L) {
+                    return result.put("error", "إعدادات الحساب البنكي غير مكتملة؛ لم يُنشأ طلب دفع")
+                }
+            }
             val providerBalance = SmsTextAnalysis.toCents(helper.getSetting("activation_provider_balance"))
             val values = ContentValues().apply {
                 put("customer_id", customerId)
                 put("service_id", serviceId)
-                put("customer_phone", SmsTextAnalysis.normalizePhone(phone))
+                put("customer_phone", normalizedPhone)
                 put("customer_name", customer.optString("full_name", ""))
                 put("service_name", service.optString("service_name_ar", service.optString("service_name", "الخدمة")))
                 put("amount_cents", amountCents)
@@ -80,7 +94,7 @@ internal class SmsActivationStore(context: Context) {
             }
             val id = db.insertOrThrow("sms_activation_requests", null, values)
             result.put("id", id).put("customer_id", customerId).put("service_id", serviceId)
-                .put("customer_phone", SmsTextAnalysis.normalizePhone(phone))
+                .put("customer_phone", normalizedPhone)
                 .put("customer_name", customer.optString("full_name", ""))
                 .put("service_name", service.optString("service_name_ar", service.optString("service_name", "الخدمة")))
                 .put("amount_cents", amountCents).put("payment_method", paymentMethod)
@@ -98,8 +112,9 @@ internal class SmsActivationStore(context: Context) {
         val expectedSender = SmsTextAnalysis.normalizePhone(helper.getSetting("system_bank_sender_phone"))
         val expectedBank = SmsTextAnalysis.normalize(helper.getSetting("system_bank_name"))
         val expectedBalance = SmsTextAnalysis.toCents(helper.getSetting("system_bank_expected_balance")) ?: return null
-        if (expectedSender.isBlank() || SmsTextAnalysis.normalizePhone(sender) != expectedSender) return null
-        if (expectedBank.isBlank() || !SmsTextAnalysis.normalize(bankNameInSms).contains(expectedBank)) return null
+        if (expectedBalance < 0L || expectedSender.length < 7 || SmsTextAnalysis.normalizePhone(sender) != expectedSender) return null
+        if (expectedBank.isBlank() || SmsTextAnalysis.normalize(bankNameInSms) != expectedBank) return null
+        if (notice.amountCents <= 0L || notice.newBalanceCents < 0L || expectedBalance > Long.MAX_VALUE - notice.amountCents) return null
         if (notice.newBalanceCents != expectedBalance + notice.amountCents) return null
 
         db.beginTransaction()
@@ -201,22 +216,24 @@ internal class SmsActivationStore(context: Context) {
         val phone = SmsTextAnalysis.normalizePhone(sender)
         val rows = mutableListOf<JSONObject>()
         db.rawQuery(
-            "SELECT * FROM sms_activation_requests WHERE provider_phone=? AND status IN ('pending_provider','reconciling') AND created_at>? ORDER BY created_at",
+            "SELECT * FROM sms_activation_requests WHERE provider_phone=? AND status IN ('pending_provider','reconciling','retry_ready','uncertain') AND created_at>? ORDER BY created_at",
             arrayOf(phone, (System.currentTimeMillis() - 60L * 60 * 1000).toString())
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 val row = cursorToJson(cursor)
-                val bodyDigits = body?.let(SmsTextAnalysis::normalizePhone).orEmpty()
-                val target = SmsTextAnalysis.normalizePhone(row.optString("customer_phone"))
-                if (bodyDigits.length < 7 || bodyDigits != target) rows += row
-                else rows += row
+                rows += row
             }
         }
         if (body != null) {
-            val digits = SmsTextAnalysis.normalizeDigits(body).filter(Char::isDigit)
-            val exactPhoneRows = rows.filter { digits.contains(SmsTextAnalysis.normalizePhone(it.optString("customer_phone"))) }
+            val phoneTokens = Regex("(?<![0-9-])\\+?[0-9][0-9\\s().-]{5,}[0-9](?![0-9])")
+                .findAll(SmsTextAnalysis.normalizeDigits(body))
+                .map { SmsTextAnalysis.normalizePhone(it.value) }
+                .filter { it.length >= 7 }
+                .toSet()
+            val exactPhoneRows = rows.filter { SmsTextAnalysis.normalizePhone(it.optString("customer_phone")) in phoneTokens }
             if (exactPhoneRows.size == 1) return exactPhoneRows.single()
             if (exactPhoneRows.isNotEmpty()) return null
+            if (phoneTokens.isNotEmpty()) return null
         }
         return rows.singleOrNull()
     }
@@ -233,7 +250,7 @@ internal class SmsActivationStore(context: Context) {
         }
         val values = ContentValues().apply { put("status", "retry_ready"); put("attempt_count", 2); put("updated_at", System.currentTimeMillis()) }
         if (db.update("sms_activation_requests", values, "id=? AND status='reconciling' AND attempt_count=1", arrayOf(request.getLong("id").toString())) != 1) return null
-        request.put("status", "retry_ready")
+        request.put("status", "retry_ready").put("attempt_count", 2)
         return request
     }
 
@@ -243,7 +260,7 @@ internal class SmsActivationStore(context: Context) {
         try {
             val request = getRequest(requestId) ?: return null
             if (request.optString("status") == "success") { db.setTransactionSuccessful(); return request }
-            if (request.optString("status") !in setOf("pending_provider", "reconciling")) return null
+            if (request.optString("status") !in setOf("pending_provider", "reconciling", "retry_ready", "uncertain")) return null
             val code = "SMS-${requestId}-${System.currentTimeMillis()}"
             val amount = request.optLong("amount_cents") / 100.0
             val activationValues = ContentValues().apply {
@@ -288,6 +305,12 @@ internal class SmsActivationStore(context: Context) {
             }
         }
     }
+
+    private fun decimalToCents(value: Double): Long? = try {
+        if (!value.isFinite()) null
+        else java.math.BigDecimal.valueOf(value).movePointRight(2)
+            .setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()
+    } catch (_: Exception) { null }
 }
 
 private object BigCents {

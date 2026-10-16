@@ -36,7 +36,7 @@ internal class SmsActivationTimeoutWorker(context: Context, params: WorkerParame
             if (status == "reconciling") {
                 Log.w(TAG, "Provider reconciliation timed out request=$id attempt=$attempt; marking uncertain")
                 store.markUncertain(id, "لم يصل رد رصيد واضح من المورد بعد الاستعلام")
-                SmsCommandProcessor.notifyCustomer(applicationContext, helper, request.optString("customer_phone"), "لا يزال تفعيل ${request.optString("service_name")} غير محسوم. لم نكرر العملية؛ يرجى مراجعة الدعم قبل إعادة الطلب.")
+                notifyUncertainCustomer(helper, request, "لم يصل رد واضح من المورد")
             }
             return Result.success()
         }
@@ -44,7 +44,7 @@ internal class SmsActivationTimeoutWorker(context: Context, params: WorkerParame
         if (attempt >= 2) {
             Log.w(TAG, "Activation confirmation timed out request=$id attempt=$attempt; no further retry")
             store.markUncertain(id, "انتهت مهلة المحاولة الثانية؛ لم تتم إعادة المحاولة مرة أخرى")
-            SmsCommandProcessor.notifyCustomer(applicationContext, helper, request.optString("customer_phone"), "لم يصل تأكيد المورد لتفعيل ${request.optString("service_name")}. أوقفنا التكرار منعاً للخصم المزدوج؛ يرجى مراجعة الدعم.")
+            notifyUncertainCustomer(helper, request, "لم يصل تأكيد المورد بعد المحاولة الأخيرة")
             return Result.success()
         }
 
@@ -54,12 +54,13 @@ internal class SmsActivationTimeoutWorker(context: Context, params: WorkerParame
         if (queryTemplate.isBlank() || providerPhone.isBlank() || !hasBaseline) {
             Log.w(TAG, "Provider timeout cannot be safely reconciled request=$id reason=baseline_or_query_missing")
             store.markUncertain(id, "لا توجد رسالة استعلام/رصيد أساس موثوق؛ لم تتم إعادة المحاولة تلقائياً")
-            SmsCommandProcessor.notifyCustomer(applicationContext, helper, request.optString("customer_phone"), "تأخر تأكيد المورد لخدمة ${request.optString("service_name")}. لم نكرر التفعيل لعدم توفر وسيلة تحقق موثوقة؛ تواصل مع الدعم.")
+            notifyUncertainCustomer(helper, request, "تعذر التحقق من نتيجة المورد بأمان")
             return Result.success()
         }
         if (ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
             Log.e(TAG, "Provider balance query blocked request=$id reason=send_sms_permission_missing")
             store.markUncertain(id, "صلاحية SMS غير متاحة لإرسال استعلام المورد")
+            notifyUncertainCustomer(helper, request, "تعذر الاستعلام من المورد لغياب صلاحية SMS")
             return Result.success()
         }
         if (!store.markReconciliation(id)) {
@@ -84,7 +85,18 @@ internal class SmsActivationTimeoutWorker(context: Context, params: WorkerParame
             Log.e(TAG, "Provider balance query failed request=$id error=${e.javaClass.simpleName}")
             store.markUncertain(id, "فشل إرسال استعلام رصيد المورد")
             helper.logSms(providerPhone, query, "provider_balance_query", "failed: ${e.message}")
+            notifyUncertainCustomer(helper, request, "فشل التحقق من رصيد المورد")
         }
         return Result.success()
+    }
+
+    private fun notifyUncertainCustomer(helper: DatabaseHelper, request: org.json.JSONObject, detail: String) {
+        val service = request.optString("service_name", "الخدمة")
+        val message = if (request.optString("payment_method") == "bank") {
+            "تم التحقق من تحويلك البنكي مقابل $service، لكن $detail. لم نكرر التفعيل؛ لا تعِد التحويل أو الطلب وتواصل مع الدعم لمراجعة الحالة."
+        } else {
+            "تعذر حسم تفعيل $service لأن $detail. لم نكرر العملية منعاً لأي خصم مزدوج؛ تواصل مع الدعم قبل إعادة الطلب."
+        }
+        SmsCommandProcessor.notifyCustomer(applicationContext, helper, request.optString("customer_phone"), message)
     }
 }
