@@ -123,8 +123,7 @@ internal object SmsCommandProcessor {
         val bankName = helper.getSetting("system_bank_name").trim()
         val accountName = helper.getSetting("system_bank_account_name").trim()
         val bankNumber = helper.getSetting("system_bank_sender_phone").trim()
-        val expectedBankBalance = SmsTextAnalysis.toCents(helper.getSetting("system_bank_expected_balance"))
-        if (bankName.isBlank() || accountName.isBlank() || bankNumber.isBlank() || expectedBankBalance == null || expectedBankBalance < 0L) {
+        if (bankName.isBlank() || accountName.isBlank() || bankNumber.isBlank()) {
             store.markFailed(request.getLong("id"), "إعدادات الحساب البنكي غير مكتملة؛ لم يُطلب الدفع")
             reply(context, helper, sender, "$serviceName تكلفتها ${formatMoney(amount)} ريال. لا يتوفر إعداد مكتمل للتحويل البنكي؛ يرجى التواصل مع الدعم لإتمام الطلب. لم يتم تفعيل الخدمة.")
             return

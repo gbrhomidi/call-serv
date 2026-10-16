@@ -42,24 +42,24 @@ class SmsActivationStoreTest {
     }
 
     @Test
-    fun `bank reconciliation requires exact sender bank account amount and balance and accepts once`() {
+    fun `bank reconciliation requires exact sender bank account and amount but not expected balance and accepts once`() {
+        helper.setSetting("system_bank_expected_balance", "not configured")
         val customer = customer(name = "علي محمد", phone = "777111222")
         val service = service(price = 25.50)
         val request = store.createRequest(customer, service, customer.getString("phone1"))
         assertEquals("awaiting_payment", request.getString("status"))
-        val notice = SmsTextAnalysis.BankNotice("علي محمد", 2_550, 102_550)
+        val notice = SmsTextAnalysis.BankNotice("علي محمد", 2_550)
 
         assertNull(store.acceptBankPayment("777000000", "مصرف الأمل", notice))
         assertNull(store.acceptBankPayment("+967777000001", "مصرف آخر", notice))
         assertNull(store.acceptBankPayment("+967777000001", "مصرف الأمل", notice.copy(accountName = "علي محمد صالح")))
         assertNull(store.acceptBankPayment("+967777000001", "مصرف الأمل", notice.copy(amountCents = 2_551)))
-        assertNull(store.acceptBankPayment("+967777000001", "مصرف الأمل", notice.copy(newBalanceCents = 102_549)))
         assertEquals("awaiting_payment", store.getRequest(request.getLong("id"))!!.getString("status"))
 
         val accepted = store.acceptBankPayment("+967777000001", "مصرف الأمل", notice)
         assertNotNull(accepted)
         assertEquals("pending_provider", accepted!!.getString("status"))
-        assertEquals("1025.50", helper.getSetting("system_bank_expected_balance"))
+        assertEquals("not configured", helper.getSetting("system_bank_expected_balance"))
         assertNull(store.acceptBankPayment("+967777000001", "مصرف الأمل", notice))
         assertEquals(1L, count("SELECT count(*) FROM sms_activation_requests WHERE status='pending_provider'"))
     }
@@ -75,10 +75,10 @@ class SmsActivationStoreTest {
         SmsCommandProcessor.process(
             context,
             "+967777000001",
-            "مصرف الأمل\nمن حساب: علي محمد\nلكم: 25.50\nرصيدكم لكم: 1025.50"
+            "مصرف الأمل\nمن حساب: علي محمد\nلكم: 25.50\nرصيدكم لكم: 0.00"
         )
 
-        assertEquals("1025.50", helper.getSetting("system_bank_expected_balance"))
+        assertEquals("", helper.getSetting("system_bank_expected_balance"))
         assertEquals("uncertain", store.getRequest(initial.getLong("id"))!!.getString("status"))
         assertEquals(0L, count("SELECT count(*) FROM activations"))
         assertTrue(store.createRequest(customer, service, customer.getString("phone1")).optBoolean("duplicate"))
@@ -94,9 +94,9 @@ class SmsActivationStoreTest {
         assertFalse(firstRequest.optBoolean("duplicate"))
         assertFalse(secondRequest.optBoolean("duplicate"))
 
-        val notice = SmsTextAnalysis.BankNotice("محمد أحمد", 1_000, 101_000)
+        val notice = SmsTextAnalysis.BankNotice("محمد أحمد", 1_000)
         assertNull(store.acceptBankPayment("777000001", "مصرف الأمل", notice))
-        assertEquals("1000.00", helper.getSetting("system_bank_expected_balance"))
+        assertEquals("", helper.getSetting("system_bank_expected_balance"))
         assertEquals(2L, count("SELECT count(*) FROM sms_activation_requests WHERE status='awaiting_payment'"))
     }
 
@@ -291,7 +291,6 @@ class SmsActivationStoreTest {
         helper.setSetting("system_bank_name", "مصرف الأمل")
         helper.setSetting("system_bank_account_name", "مؤسسة الاتصالات")
         helper.setSetting("system_bank_sender_phone", "+967777000001")
-        helper.setSetting("system_bank_expected_balance", "1000.00")
         helper.setSetting("activation_provider_phone", "+967777000001")
         helper.setSetting("activation_provider_balance", "500.00")
     }

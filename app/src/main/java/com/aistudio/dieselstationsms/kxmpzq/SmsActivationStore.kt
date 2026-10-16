@@ -70,8 +70,7 @@ internal class SmsActivationStore(context: Context) {
                 val bankName = helper.getSetting("system_bank_name").trim()
                 val accountName = helper.getSetting("system_bank_account_name").trim()
                 val bankSender = SmsTextAnalysis.normalizePhone(helper.getSetting("system_bank_sender_phone"))
-                val expectedBalance = SmsTextAnalysis.toCents(helper.getSetting("system_bank_expected_balance"))
-                if (bankName.isBlank() || accountName.isBlank() || bankSender.length < 7 || expectedBalance == null || expectedBalance < 0L) {
+                if (bankName.isBlank() || accountName.isBlank() || bankSender.length < 7) {
                     return result.put("error", "إعدادات الحساب البنكي غير مكتملة؛ لم يُنشأ طلب دفع")
                 }
             }
@@ -111,11 +110,9 @@ internal class SmsActivationStore(context: Context) {
         val now = System.currentTimeMillis()
         val expectedSender = SmsTextAnalysis.normalizePhone(helper.getSetting("system_bank_sender_phone"))
         val expectedBank = SmsTextAnalysis.normalize(helper.getSetting("system_bank_name"))
-        val expectedBalance = SmsTextAnalysis.toCents(helper.getSetting("system_bank_expected_balance")) ?: return null
-        if (expectedBalance < 0L || expectedSender.length < 7 || SmsTextAnalysis.normalizePhone(sender) != expectedSender) return null
+        if (expectedSender.length < 7 || SmsTextAnalysis.normalizePhone(sender) != expectedSender) return null
         if (expectedBank.isBlank() || SmsTextAnalysis.normalize(bankNameInSms) != expectedBank) return null
-        if (notice.amountCents <= 0L || notice.newBalanceCents < 0L || expectedBalance > Long.MAX_VALUE - notice.amountCents) return null
-        if (notice.newBalanceCents != expectedBalance + notice.amountCents) return null
+        if (notice.amountCents <= 0L) return null
 
         db.beginTransaction()
         try {
@@ -139,7 +136,6 @@ internal class SmsActivationStore(context: Context) {
                 put("updated_at", now)
             }
             if (db.update("sms_activation_requests", updated, "id=? AND status='awaiting_payment'", arrayOf(id.toString())) != 1) return null
-            helper.setSetting("system_bank_expected_balance", BigCents.format(notice.newBalanceCents))
             request.put("status", "pending_provider").put("payment_method", "bank")
             db.setTransactionSuccessful()
             return request

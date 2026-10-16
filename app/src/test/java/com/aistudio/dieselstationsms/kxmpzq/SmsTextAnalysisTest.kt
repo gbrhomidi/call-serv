@@ -13,7 +13,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class SmsTextAnalysisTest {
     @Test
-    fun parsesArabicBankReceiptAmountAndResultingBalance() {
+    fun parsesArabicBankReceiptAmountAndIgnoresAnyBalance() {
         val notice = SmsTextAnalysis.parseBankNotice(
             "الشرعي لكم 2,000 ر ي\nمن حساب: عبدالسلام صالح جحيش\nلكم: 6,085.06 ر ي",
             "الشرعي"
@@ -21,13 +21,25 @@ class SmsTextAnalysisTest {
         requireNotNull(notice)
         assertEquals("عبدالسلام صالح جحيش", notice.accountName)
         assertEquals(200_000L, notice.amountCents)
-        assertEquals(608_506L, notice.newBalanceCents)
     }
 
     @Test
-    fun rejectsReceiptWithoutConfiguredBankNameOrCompleteBalance() {
+    fun rejectsReceiptWithoutConfiguredBankNameAndAcceptsReceiptWithoutBalance() {
         assertNull(SmsTextAnalysis.parseBankNotice("الشرعي لكم 2,000 ر ي من حساب: عميل لكم: 6,085 ر ي", "بنك آخر"))
-        assertNull(SmsTextAnalysis.parseBankNotice("الشرعي لكم 2,000 ر ي من حساب: عميل", "الشرعي"))
+        val receipt = SmsTextAnalysis.parseBankNotice("الشرعي من حساب: عميل لكم: 2,000 ر ي", "الشرعي")
+        requireNotNull(receipt)
+        assertEquals(200_000L, receipt.amountCents)
+    }
+
+    @Test
+    fun bankReceiptNewBalanceDoesNotAffectTheParsedPaymentAmount() {
+        val notice = SmsTextAnalysis.parseBankNotice(
+            "مصرف الأمل\nمن حساب: أحمد محمد\nلكم: 25.50\nالرصيد لكم: 0.00",
+            "مصرف الأمل"
+        )
+        requireNotNull(notice)
+        assertEquals("أحمد محمد", notice.accountName)
+        assertEquals(2_550L, notice.amountCents)
     }
 
     @Test
@@ -62,7 +74,6 @@ class SmsTextAnalysisTest {
         requireNotNull(notice)
         assertEquals("أحمد محمد", notice.accountName)
         assertEquals(200_050L, notice.amountCents)
-        assertEquals(608_506L, notice.newBalanceCents)
         assertEquals(200_050L, SmsTextAnalysis.lastMoneyCents("رصيدك الحالي ٢٬٠٠٠٫٥٠ ريال"))
         assertNull(SmsTextAnalysis.lastMoneyCents("الرصيد ٢٬٠٠٠٫٥٠ ثم مبلغ ملتبس 10.005"))
         assertNull(SmsTextAnalysis.lastMoneyCents("الرصيد -٢٬٠٠٠٫٥٠ ريال"))

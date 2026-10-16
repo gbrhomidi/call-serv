@@ -238,11 +238,12 @@ internal class TelecomWebApi(context: Context) {
     }
 
     private fun report(type: String): Any = when (type) {
-        "services_summary", "services_by_status", "services_pricing", "full_services" -> db.getServiceReport()
-        "customers_list", "customers_balance", "customers_credit", "full_customers" -> db.getCustomerReport()
+        "services_summary", "services_by_status", "services_pricing", "full_services" -> db.getOperationalReport(type)
+        "customers_list", "customers_balance", "customers_credit", "full_customers" -> db.getOperationalReport(type)
         "suppliers_list", "suppliers_balance" -> db.getSupplierReport()
         "suppliers_transfers" -> db.getTransfers()
-        "sms_summary", "sms_by_status", "sms_analysis", "full_sms" -> mapArray(db.getSmsMetrics(), ::smsForUi)
+        "sms_summary", "sms_by_status", "sms_analysis" -> db.getOperationalReport(type)
+        "full_sms" -> mapArray(db.getOperationalReport(type), ::smsForUi)
         "full_financial" -> db.getDashboardStats()
         else -> throw IllegalArgumentException("نوع التقرير غير معروف")
     }

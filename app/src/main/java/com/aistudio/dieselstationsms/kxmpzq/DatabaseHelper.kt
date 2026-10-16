@@ -7,8 +7,10 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
+import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.Writer
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.locks.ReentrantLock
@@ -43,7 +45,7 @@ class DatabaseHelper(private val context: Context) :
     companion object {
         private const val TAG = "DatabaseHelper"
         private const val DB_NAME = "telecom_activator.db"
-        const val VERSION = 1
+        const val VERSION = 2
 
         // ==================== Thread-Safe Date Formats ====================
         private val dateFormatThreadLocal = ThreadLocal<SimpleDateFormat>()
@@ -109,7 +111,10 @@ class DatabaseHelper(private val context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // سيتم تنفيذ الترحيلات عند الحاجة
+        if (oldVersion < 2) {
+            createIndexes(db)
+            db.delete("system_settings", "setting_key=?", arrayOf("system_bank_expected_balance"))
+        }
         Log.d(TAG, "Upgrading database from $oldVersion to $newVersion")
     }
 
@@ -447,11 +452,14 @@ class DatabaseHelper(private val context: Context) :
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_customers_phone1 ON customers(phone1)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_customers_phone2 ON customers(phone2)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(status)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_customers_deleted_name ON customers(is_deleted, full_name)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_customers_credit ON customers(is_deleted, allow_credit, current_balance)")
         
         // الخدمات
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_services_code ON services(service_code)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_services_type ON services(service_type)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_services_status ON services(status)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_services_deleted_status_type ON services(is_deleted, status, service_type)")
         
         // الموردين
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_suppliers_phone1 ON suppliers(phone1)")
@@ -468,6 +476,10 @@ class DatabaseHelper(private val context: Context) :
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_activations_service ON activations(service_id)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_activations_status ON activations(status)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_activations_phone ON activations(phone_number)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_activations_service_status ON activations(service_id, status)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_activations_customer_status ON activations(customer_id, status)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_metrics_timestamp_id ON sms_metrics(timestamp DESC, id DESC)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_metrics_event_timestamp ON sms_metrics(event_type, timestamp DESC)")
     }
 
     // ================================================================
@@ -1784,6 +1796,40 @@ class DatabaseHelper(private val context: Context) :
         }
     }
 
+    /** Writes every row from a whitelisted collection as comma-separated JSON objects. */
+    fun writeExportRows(collection: String, writer: Writer): Int {
+        val sql = when (collection) {
+            "services" -> "SELECT * FROM services WHERE is_deleted=0 ORDER BY id"
+            "customers" -> "SELECT * FROM customers WHERE is_deleted=0 ORDER BY id"
+            "sms" -> "SELECT * FROM sms_metrics ORDER BY timestamp DESC, id DESC"
+            else -> throw IllegalArgumentException("نوع التصدير غير مدعوم")
+        }
+        dbLock.lock()
+        return try {
+            var written = 0
+            readableDatabase.rawQuery(sql, null).use { cursor ->
+                while (cursor.moveToNext()) {
+                    if (written > 0) writer.append(',')
+                    val row = JSONObject()
+                    for (column in 0 until cursor.columnCount) {
+                        val value: Any = if (cursor.isNull(column)) JSONObject.NULL else when (cursor.getType(column)) {
+                            Cursor.FIELD_TYPE_INTEGER -> cursor.getLong(column)
+                            Cursor.FIELD_TYPE_FLOAT -> cursor.getDouble(column)
+                            Cursor.FIELD_TYPE_BLOB -> Base64.encodeToString(cursor.getBlob(column), Base64.NO_WRAP)
+                            else -> cursor.getString(column)
+                        }
+                        row.put(cursor.getColumnName(column), value)
+                    }
+                    writer.append(row.toString())
+                    written++
+                }
+            }
+            written
+        } finally {
+            dbLock.unlock()
+        }
+    }
+
     fun deleteSmsMetric(id: Int): Int {
         dbLock.lock()
         return try {
@@ -1927,6 +1973,79 @@ class DatabaseHelper(private val context: Context) :
         }
 
         return stats
+    }
+
+    /** Purpose-built report queries: summary buttons aggregate in SQLite and detail views are bounded. */
+    fun getOperationalReport(type: String): JSONArray {
+        val sql = when (type) {
+            "services_summary" -> """
+                SELECT service_type, COUNT(*) AS service_count,
+                       SUM(CASE WHEN status='active' AND is_active=1 THEN 1 ELSE 0 END) AS active_count,
+                       ROUND(AVG(price), 2) AS average_price
+                FROM services WHERE is_deleted=0 GROUP BY service_type ORDER BY service_type
+            """.trimIndent()
+            "services_by_status" -> """
+                SELECT status, COUNT(*) AS service_count, ROUND(AVG(price), 2) AS average_price
+                FROM services WHERE is_deleted=0 GROUP BY status ORDER BY status
+            """.trimIndent()
+            "services_pricing" -> """
+                SELECT service_type, COUNT(*) AS service_count, MIN(price) AS minimum_price,
+                       ROUND(AVG(price), 2) AS average_price, MAX(price) AS maximum_price
+                FROM services WHERE is_deleted=0 GROUP BY service_type ORDER BY service_type
+            """.trimIndent()
+            "full_services" -> """
+                SELECT s.id, s.service_code, s.service_name, s.service_type, s.price, s.is_active, s.status,
+                       (SELECT COUNT(*) FROM activations a WHERE a.service_id=s.id AND a.status='success') AS activation_count,
+                       (SELECT COALESCE(SUM(a.amount), 0) FROM activations a WHERE a.service_id=s.id AND a.status='success') AS total_revenue
+                FROM services s WHERE s.is_deleted=0 ORDER BY s.service_name LIMIT 2000
+            """.trimIndent()
+            "customers_list", "full_customers" -> """
+                SELECT id, customer_code, full_name, phone1, balance_deposit, current_balance,
+                       allow_credit, credit_limit, status, total_purchases, total_payments
+                FROM customers WHERE is_deleted=0 ORDER BY full_name LIMIT 2000
+            """.trimIndent()
+            "customers_balance" -> """
+                SELECT CASE WHEN current_balance > 0 THEN 'مدين' WHEN current_balance < 0 THEN 'دائن' ELSE 'متوازن' END AS balance_status,
+                       COUNT(*) AS customer_count, ROUND(SUM(current_balance), 2) AS total_balance,
+                       ROUND(AVG(current_balance), 2) AS average_balance
+                FROM customers WHERE is_deleted=0 GROUP BY balance_status ORDER BY balance_status
+            """.trimIndent()
+            "customers_credit" -> """
+                SELECT full_name, phone1, allow_credit, credit_limit, current_balance,
+                       ROUND(MAX(credit_limit-current_balance, 0), 2) AS available_credit,
+                       CASE WHEN allow_credit=1 THEN 'مسموح' ELSE 'غير مسموح' END AS credit_status
+                FROM customers WHERE is_deleted=0 ORDER BY allow_credit DESC, current_balance DESC LIMIT 2000
+            """.trimIndent()
+            "sms_summary" -> """
+                SELECT COUNT(*) AS total_messages, COUNT(DISTINCT phone) AS unique_senders,
+                       SUM(CASE WHEN lower(event_type) LIKE '%fail%' OR lower(event_type) LIKE '%reject%' THEN 1 ELSE 0 END) AS failed_messages,
+                       MAX(timestamp) AS latest_timestamp
+                FROM sms_metrics
+            """.trimIndent()
+            "sms_by_status" -> """
+                SELECT CASE
+                         WHEN lower(event_type) LIKE '%fail%' OR lower(event_type) LIKE '%reject%' OR lower(event_type) LIKE '%error%' THEN 'فاشلة'
+                         WHEN lower(event_type) LIKE '%process%' OR lower(event_type) LIKE '%success%' OR lower(event_type) LIKE '%verified%' OR lower(event_type) LIKE '%sent%' THEN 'معالجة'
+                         ELSE 'مستلمة/أخرى'
+                       END AS status,
+                       COUNT(*) AS message_count, COUNT(DISTINCT phone) AS unique_senders
+                FROM sms_metrics GROUP BY status ORDER BY status
+            """.trimIndent()
+            "sms_analysis" -> """
+                SELECT event_type, COUNT(*) AS message_count, COUNT(DISTINCT phone) AS unique_senders,
+                       ROUND(AVG(length(COALESCE(details, ''))), 1) AS average_content_length,
+                       MAX(timestamp) AS latest_timestamp
+                FROM sms_metrics GROUP BY event_type ORDER BY message_count DESC, event_type LIMIT 200
+            """.trimIndent()
+            "full_sms" -> "SELECT * FROM sms_metrics ORDER BY timestamp DESC, id DESC LIMIT 1000"
+            else -> throw IllegalArgumentException("نوع التقرير غير معروف")
+        }
+        dbLock.lock()
+        return try {
+            readableDatabase.rawQuery(sql, null).use { cursor -> cursorToJsonArray(cursor) }
+        } finally {
+            dbLock.unlock()
+        }
     }
 
     /**

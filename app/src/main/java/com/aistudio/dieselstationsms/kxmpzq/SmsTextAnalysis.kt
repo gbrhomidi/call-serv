@@ -67,21 +67,20 @@ internal object SmsTextAnalysis {
     fun lastMoneyCents(body: String): Long? = amountTokenPattern.findAll(normalizeDigits(body))
         .lastOrNull()?.value?.let(::toCents)
 
-    data class BankNotice(val accountName: String, val amountCents: Long, val newBalanceCents: Long)
+    data class BankNotice(val accountName: String, val amountCents: Long)
 
     fun parseBankNotice(body: String, expectedBankName: String): BankNotice? {
         val bank = normalize(expectedBankName)
         val normalizedBody = normalize(body)
         if (bank.isBlank() || !(" $normalizedBody ").contains(" $bank ")) return null
         val amountMatches = bankAmountPattern.findAll(normalizeDigits(body)).toList()
-        if (amountMatches.size != 2) return null
+        if (amountMatches.isEmpty() || amountMatches.size > 2) return null
         val amount = toCents(amountMatches.first().groupValues[1]) ?: return null
-        val total = toCents(amountMatches.last().groupValues[1]) ?: return null
-        if (amount <= 0 || total <= 0) return null
+        if (amount <= 0) return null
         val account = accountPattern.find(normalizeDigits(body))?.groupValues?.get(1)?.trim()
             ?.trim(',', '،', ':', '：', ' ')
             ?.takeIf { it.isNotBlank() } ?: return null
-        return BankNotice(account, amount, total)
+        return BankNotice(account, amount)
     }
 
     fun isSuccessMessage(body: String): Boolean {

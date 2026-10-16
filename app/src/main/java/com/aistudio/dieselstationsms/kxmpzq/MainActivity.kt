@@ -559,14 +559,14 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun getPersistentSetting(key: String): String {
-            val allowed = setOf("system_bank_name", "system_bank_account_name", "system_bank_sender_phone", "system_bank_expected_balance", "activation_provider_phone", "activation_provider_balance", "supplier_balance_query_sms")
+            val allowed = setOf("system_bank_name", "system_bank_account_name", "system_bank_sender_phone", "activation_provider_phone", "activation_provider_balance", "supplier_balance_query_sms")
             if (key !in allowed) return ""
             return try { DatabaseHelper.getInstance(context).getSetting(key) } catch (_: Exception) { "" }
         }
 
         @JavascriptInterface
         fun setPersistentSetting(key: String, value: String): Boolean {
-            val allowed = setOf("system_bank_name", "system_bank_account_name", "system_bank_sender_phone", "system_bank_expected_balance", "activation_provider_phone", "activation_provider_balance", "supplier_balance_query_sms")
+            val allowed = setOf("system_bank_name", "system_bank_account_name", "system_bank_sender_phone", "activation_provider_phone", "activation_provider_balance", "supplier_balance_query_sms")
             if (key !in allowed || value.length > 200) return false
             return try { DatabaseHelper.getInstance(context).setSetting(key, value.trim()) } catch (_: Exception) { false }
         }
@@ -620,6 +620,39 @@ class MainActivity : AppCompatActivity() {
                 true
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to prepare JSON export", e)
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun exportCollection(collection: String): Boolean {
+            if (collection !in setOf("services", "customers", "sms")) return false
+            return try {
+                val safeName = "${collection}_${System.currentTimeMillis()}.json"
+                val directory = File(context.filesDir, "exports").apply { mkdirs() }
+                val file = File(directory, safeName)
+                file.bufferedWriter(Charsets.UTF_8).use { writer ->
+                    writer.append("{\"collection\":")
+                        .append(org.json.JSONObject.quote(collection))
+                        .append(",\"exported_at_epoch_ms\":")
+                        .append(System.currentTimeMillis().toString())
+                        .append(",\"data\":[")
+                    val rowCount = DatabaseHelper.getInstance(context).writeExportRows(collection, writer)
+                    writer.append("],\"row_count\":").append(rowCount.toString()).append('}')
+                }
+                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/json"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    clipData = ClipData.newUri(context.contentResolver, safeName, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                activity.runOnUiThread {
+                    if (!isDestroyed.get()) activity.startActivity(Intent.createChooser(shareIntent, "حفظ أو مشاركة ملف $collection"))
+                }
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to export SQLite collection: $collection", e)
                 false
             }
         }

@@ -1350,10 +1350,6 @@
                         <input type="tel" class="form-control" id="systemBankSenderPhone" placeholder="رقم مرسل SMS للبنك">
                     </div>
                     <div class="form-group">
-                        <label>رصيد حساب النظام الحالي لدى البنك (قبل أول تحويل)</label>
-                        <input type="number" min="0" step="0.01" class="form-control" id="systemBankExpectedBalance" placeholder="أدخله بدقة كما في رسالة البنك">
-                    </div>
-                    <div class="form-group">
                         <label>رقم هاتف المورد الذي يرسل نتيجة USSD ورصيد المورد</label>
                         <input type="tel" class="form-control" id="activationProviderPhone" placeholder="رقم المورد الموثوق">
                     </div>
@@ -1365,7 +1361,7 @@
                         <label>نص SMS للاستعلام عن رصيد المورد</label>
                         <textarea class="form-control" id="supplierBalanceQuery" rows="2" placeholder="رسالة المورد للاستعلام عن رصيد النظام"></textarea>
                     </div>
-                    <p class="text-muted">لن تُقبل أي حوالة آلياً دون تطابق رقم البنك والمبلغ واسم العميل ورصيد البنك المتوقع. ولن يُعاد أمر USSD إلا مرة واحدة بعد رد موثوق يثبت أن رصيد المورد لم يتغير.</p>
+                    <p class="text-muted">تُقبل الحوالة آلياً عند تطابق رقم مرسل البنك واسم البنك واسم العميل والمبلغ مع طلب واحد منتظر. لا يُستخدم رصيد حساب البنك كشرط مطابقة. ولن يُعاد أمر USSD إلا مرة واحدة بعد رد موثوق يثبت أن رصيد المورد لم يتغير.</p>
                     <div class="form-group">
                         <label>الخدمة المراد ضبط أمرها الكامل</label>
                         <select class="form-control" id="smsServiceSelect" onchange="loadSelectedSmsCommand()"></select>
@@ -1944,7 +1940,6 @@
             systemBankName: 'system_bank_name',
             systemBankAccountName: 'system_bank_account_name',
             systemBankSenderPhone: 'system_bank_sender_phone',
-            systemBankExpectedBalance: 'system_bank_expected_balance',
             activationProviderPhone: 'activation_provider_phone',
             activationProviderBalance: 'activation_provider_balance',
             supplierBalanceQuery: 'supplier_balance_query_sms'
@@ -2196,7 +2191,18 @@
             showToast('تم تنزيل الملف', 'success');
         }
 
-        function exportServices() { exportJsonFile('services.json', currentServices); }
+        function exportCollection(collection, filename, fallbackRows) {
+            if (window.AndroidInterface && typeof window.AndroidInterface.exportCollection === 'function') {
+                const created = window.AndroidInterface.exportCollection(collection);
+                showToast(created
+                    ? 'تم إنشاء ملف التصدير؛ اختر تطبيقاً لحفظه أو مشاركته'
+                    : 'تعذر إنشاء ملف التصدير، تحقق من مساحة التخزين ثم أعد المحاولة', created ? 'success' : 'error');
+                return;
+            }
+            exportJsonFile(filename, fallbackRows);
+        }
+
+        function exportServices() { exportCollection('services', 'services.json', currentServices); }
 
         // ============================================================
         //  CUSTOMERS CRUD
@@ -2311,7 +2317,7 @@
             }
         }
 
-        function exportCustomers() { exportJsonFile('customers.json', currentCustomers); }
+        function exportCustomers() { exportCollection('customers', 'customers.json', currentCustomers); }
 
         // ============================================================
         //  SUPPLIERS CRUD
@@ -2505,7 +2511,7 @@
             }
         }
 
-        function exportSms() { exportJsonFile('sms_log.json', currentSms); }
+        function exportSms() { exportCollection('sms', 'sms_log.json', currentSms); }
 
         // ============================================================
         //  NOTIFICATIONS
@@ -2542,43 +2548,69 @@
         // ============================================================
         let currentReportData = null;
 
+        function renderReportData(data, body) {
+            body.replaceChildren();
+            if (Array.isArray(data)) {
+                const rows = data.filter(row => row && typeof row === 'object');
+                if (rows.length === 0) {
+                    body.textContent = 'لا توجد بيانات لهذا التقرير';
+                    return;
+                }
+                const keys = Object.keys(rows[0]);
+                const container = document.createElement('div');
+                container.className = 'table-container';
+                const table = document.createElement('table');
+                table.className = 'data-table';
+                const thead = document.createElement('thead');
+                const headerRow = document.createElement('tr');
+                keys.forEach(key => {
+                    const cell = document.createElement('th');
+                    cell.textContent = key;
+                    headerRow.appendChild(cell);
+                });
+                thead.appendChild(headerRow);
+                const tbody = document.createElement('tbody');
+                rows.forEach(row => {
+                    const tr = document.createElement('tr');
+                    keys.forEach(key => {
+                        const td = document.createElement('td');
+                        const value = row[key];
+                        td.textContent = value == null ? '' :
+                            (typeof value === 'object' ? JSON.stringify(value) : String(value));
+                        tr.appendChild(td);
+                    });
+                    tbody.appendChild(tr);
+                });
+                table.append(thead, tbody);
+                container.appendChild(table);
+                body.appendChild(container);
+                return;
+            }
+
+            const pre = document.createElement('pre');
+            pre.style.cssText = 'background:var(--bg-color);padding:16px;border-radius:var(--radius-sm);font-size:0.85rem;overflow:auto;white-space:pre-wrap;';
+            pre.textContent = JSON.stringify(data ?? {}, null, 2);
+            body.appendChild(pre);
+        }
+
         async function generateReport(type) {
             showLoading(true);
             try {
                 const result = await apiCall('generate_report', { report_type: type });
-                if (result.success) {
-                    currentReportData = result.data;
-                    document.getElementById('reportModalTitle').textContent = '📊 ' +
-                        (type.replace('_', ' ').toUpperCase());
-                    const body = document.getElementById('reportModalBody');
-                    if (Array.isArray(result.data)) {
-                        if (result.data.length === 0) {
-                            body.innerHTML = '<div class="text-center text-muted">لا توجد بيانات</div>';
-                        } else {
-                            let html =
-                                '<div class="table-container"><table class="data-table"><thead><tr>';
-                            const keys = Object.keys(result.data[0]);
-                            keys.forEach(k => html += `<th>${k}</th>`);
-                            html += '</tr></thead><tbody>';
-                            result.data.forEach(item => {
-                                html += '<tr>';
-                                keys.forEach(k => html += `<td>${item[k] ?? ''}</td>`);
-                                html += '</tr>';
-                            });
-                            html += '</tbody></table></div>';
-                            body.innerHTML = html;
-                        }
-                    } else {
-                        body.innerHTML =
-                            `<pre style="background:var(--bg-color);padding:16px;border-radius:var(--radius-sm);font-size:0.85rem;overflow:auto;">${JSON.stringify(result.data, null, 2)}</pre>`;
-                    }
-                    document.getElementById('reportModal').classList.add('active');
-                    showToast('تم توليد التقرير', 'success');
-                } else {
-                    showToast(result.error || 'فشل توليد التقرير', 'error');
-                }
+                if (!result.success) throw new Error(result.error || 'فشل توليد التقرير');
+                if (!Object.prototype.hasOwnProperty.call(result, 'data')) throw new Error('لم تُرجع قاعدة البيانات بيانات التقرير');
+                const title = document.getElementById('reportModalTitle');
+                const body = document.getElementById('reportModalBody');
+                const modal = document.getElementById('reportModal');
+                if (!title || !body || !modal) throw new Error('تعذر العثور على نافذة عرض التقرير');
+                currentReportData = result.data;
+                title.textContent = '📊 ' + type.replace(/_/g, ' ').toUpperCase();
+                renderReportData(result.data, body);
+                modal.classList.add('active');
+                showToast('تم توليد التقرير', 'success');
             } catch (e) {
-                showToast('خطأ في توليد التقرير', 'error');
+                console.error('Report generation failed:', type, e);
+                showToast(e?.message || 'خطأ في توليد التقرير', 'error');
             } finally {
                 showLoading(false);
             }

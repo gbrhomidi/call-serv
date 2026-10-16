@@ -27,7 +27,9 @@ jobs:
   # Signing secrets are never exposed to pull_request jobs, including same-repository PRs.
   verify-secrets:
     name: Verify Release Signing Secrets
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/sms-activation-bank-reconciliation')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -198,8 +200,8 @@ jobs:
           package, version_code, version_name = match.groups()
           if package != "com.aistudio.telecomactivation":
              sys.exit(f"::error::Unexpected applicationId: {package}")
-          if int(version_code) < 301:
-              sys.exit(f"::error::Expected versionCode >= 301, got {version_code}.")
+          if int(version_code) < 302:
+              sys.exit(f"::error::Expected versionCode >= 302, got {version_code}.")
           print(f"Verified installable feature APK: {package}, versionCode={version_code}, versionName={version_name}")
           PY
           rm -rf feature-apk
@@ -294,8 +296,8 @@ jobs:
           package, version_code, version_name = match.groups()
           if package != "com.aistudio.telecomactivation":
              sys.exit(f"::error::Unexpected applicationId: {package}")
-          if int(version_code) < 301:
-              sys.exit(f"::error::versionCode {version_code} is below the production baseline.")
+          if int(version_code) < 302:
+              sys.exit(f"::error::versionCode {version_code} is below the production baseline 302.")
           print(f"Verified production update APK: {package}, versionCode={version_code}, versionName={version_name}")
           PY
           echo "path=$apk_path" >> "$GITHUB_OUTPUT"

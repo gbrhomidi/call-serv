@@ -13,6 +13,8 @@ def read(relative: str) -> str:
 
 html = read("app/src/main/assets/web_interface.html")
 activity = read("app/src/main/java/com/aistudio/dieselstationsms/kxmpzq/MainActivity.kt")
+database = read("app/src/main/java/com/aistudio/dieselstationsms/kxmpzq/DatabaseHelper.kt")
+web_api = read("app/src/main/java/com/aistudio/dieselstationsms/kxmpzq/TelecomWebApi.kt")
 receiver = read("app/src/main/java/com/aistudio/dieselstationsms/kxmpzq/SmsReceiver.kt")
 processor = read("app/src/main/java/com/aistudio/dieselstationsms/kxmpzq/SmsCommandProcessor.kt")
 analysis = read("app/src/main/java/com/aistudio/dieselstationsms/kxmpzq/SmsTextAnalysis.kt")
@@ -30,20 +32,21 @@ checks = {
         and 'applicationId = "com.aistudio.telecomactivation"' in gradle_build
         and 'android:label="@string/app_name"' in manifest
     ),
-    "bank name/account/sender/balance and provider settings are on the settings screen": all(
+    "bank name/account/sender and provider settings are present without an expected-bank-balance field": all(
         f'id="{element}"' in html
         for element in (
             "systemBankName",
             "systemBankAccountName",
             "systemBankSenderPhone",
-            "systemBankExpectedBalance",
             "activationProviderPhone",
             "activationProviderBalance",
             "supplierBalanceQuery",
             "smsServiceSelect",
             "fullActivationCommand",
         )
-    ),
+    ) and "systemBankExpectedBalance" not in html
+    and "system_bank_expected_balance" not in processor
+    and "system_bank_expected_balance" not in store,
     "the settings screen loads/saves the service command through the Android bridge": all(
         token in html for token in ("getSmsServiceCatalog", "setServiceActivationTemplate", "saveSelectedSmsCommand")
     ) and all(token in activity for token in ("fun getSmsServiceCatalog()", "fun setServiceActivationTemplate(")),
@@ -67,6 +70,17 @@ checks = {
     "activation orders and bank reconciliation persist in SQLite": all(
         token in store for token in ("sms_activation_requests", "fun acceptBankPayment(", "status='awaiting_payment'")
     ),
+    "visible reports use dedicated database queries and safe DOM rendering": all(
+        token in html for token in ("function renderReportData", "generate_report", "reportModalBody")
+    ) and all(
+        token in web_api for token in ("getOperationalReport(type)", "full_financial")
+    ) and all(
+        token in database for token in ("fun getOperationalReport(", "sms_summary", "customers_credit", "services_pricing")
+    ),
+    "service/customer/SMS exports stream complete SQLite rows to Android file sharing": all(
+        token in html for token in ("function exportCollection", "exportCollection('services'", "exportCollection('customers'", "exportCollection('sms'")
+    ) and "fun exportCollection(collection: String)" in activity
+    and "fun writeExportRows(collection: String" in database,
     "NanoHTTPD and the persistent foreground SMS service are absent": (
         "nanohttpd" not in gradle_build.lower()
         and ".SMSService" not in manifest

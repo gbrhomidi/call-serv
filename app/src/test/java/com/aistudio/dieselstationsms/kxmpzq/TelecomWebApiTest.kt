@@ -123,6 +123,50 @@ class TelecomWebApiTest {
         assertFalse(call("save_service", JSONObject().put("name", "بدون كود")).optBoolean("success"))
     }
 
+    @Test
+    fun `all reports used by the visible UI return successful real database results`() {
+        val reportTypes = listOf(
+            "full_customers", "full_services", "full_sms", "full_financial",
+            "services_summary", "services_by_status", "services_pricing",
+            "customers_list", "customers_balance", "customers_credit",
+            "sms_summary", "sms_by_status", "sms_analysis"
+        )
+        reportTypes.forEach { type ->
+            val result = call("generate_report", JSONObject().put("report_type", type))
+            assertTrue("Report '$type' failed: ${result.optString("error")}", result.optBoolean("success"))
+            assertTrue("Report '$type' omitted its data field", result.has("data"))
+        }
+    }
+
+    @Test
+    fun `version one database upgrade removes obsolete bank balance and adds performance indexes`() {
+        db.setSetting("system_bank_expected_balance", "123.45")
+        val customerCountBefore = db.readableDatabase.rawQuery("SELECT count(*) FROM customers", null).use { cursor ->
+            cursor.moveToFirst()
+            cursor.getLong(0)
+        }
+        db.close()
+        context.openOrCreateDatabase("telecom_activator.db", Context.MODE_PRIVATE, null).use { legacy ->
+            legacy.version = 1
+        }
+        DatabaseHelper.closeInstance()
+        db = DatabaseHelper.getInstance(context)
+        val upgraded = db.readableDatabase
+
+        assertEquals("", db.getSetting("system_bank_expected_balance"))
+        val customerCountAfter = upgraded.rawQuery("SELECT count(*) FROM customers", null).use { cursor ->
+            cursor.moveToFirst()
+            cursor.getLong(0)
+        }
+        assertEquals(customerCountBefore, customerCountAfter)
+        val indexNames = mutableSetOf<String>()
+        upgraded.rawQuery("PRAGMA index_list('sms_metrics')", null).use { cursor ->
+            val nameColumn = cursor.getColumnIndexOrThrow("name")
+            while (cursor.moveToNext()) indexNames += cursor.getString(nameColumn)
+        }
+        assertTrue("Timestamp index missing after upgrade: $indexNames", "idx_metrics_timestamp_id" in indexNames)
+    }
+
     private fun call(action: String, data: JSONObject = JSONObject()): JSONObject =
         JSONObject(api.execute(action, data.toString()))
 }

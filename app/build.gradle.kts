@@ -24,8 +24,8 @@ android {
         minSdk = 21
         targetSdk = 34
         // Keep the applicationId/signing key stable and increment above the original 300 build.
-        versionCode = 301
-        versionName = "3.0.1"
+        versionCode = 302
+        versionName = "3.0.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
