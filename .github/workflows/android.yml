@@ -192,10 +192,10 @@ jobs:
           output = subprocess.check_output([os.environ["AAPT_PATH"], "dump", "badging", os.environ["APK_PATH"]], text=True)
           match = re.search(r"^package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']*)'", output, re.MULTILINE)
           if not match:
-              sys.exit("::error::Could not read package/version metadata from the APK.")
+             sys.exit("::error::Could not read package/version metadata from the APK.")
           package, version_code, version_name = match.groups()
-          if package != "com.aistudio.dieselstationsms.kxmpzq":
-              sys.exit(f"::error::Unexpected applicationId: {package}")
+          if package != "com.aistudio.telecomactivation":
+             sys.exit(f"::error::Unexpected applicationId: {package}")
           if int(version_code) < 301:
               sys.exit(f"::error::Expected versionCode >= 301, got {version_code}.")
           print(f"Verified installable feature APK: {package}, versionCode={version_code}, versionName={version_name}")
@@ -287,10 +287,10 @@ jobs:
           output = subprocess.check_output([os.environ["AAPT_PATH"], "dump", "badging", os.environ["APK_PATH"]], text=True)
           match = re.search(r"^package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']*)'", output, re.MULTILINE)
           if not match:
-              sys.exit("::error::Could not read package/version metadata from the APK.")
+             sys.exit("::error::Could not read package/version metadata from the APK.")
           package, version_code, version_name = match.groups()
-          if package != "com.aistudio.dieselstationsms.kxmpzq":
-              sys.exit(f"::error::Unexpected applicationId: {package}")
+          if package != "com.aistudio.telecomactivation":
+             sys.exit(f"::error::Unexpected applicationId: {package}")
           if int(version_code) < 301:
               sys.exit(f"::error::versionCode {version_code} is below the production baseline.")
           print(f"Verified production update APK: {package}, versionCode={version_code}, versionName={version_name}")

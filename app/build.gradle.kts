@@ -23,7 +23,7 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.aistudio.dieselstationsms.kxmpzq"
+        applicationId = "com.aistudio.telecomactivation"
         minSdk = 21
         targetSdk = 34
         // Keep the applicationId/signing key stable and increment above the original 300 build.

@@ -44,8 +44,9 @@
 
 يعمل التطبيق بشكل كامل **Offline** دون الحاجة لاتصال إنترنت، مع واجهة مستخدم تفاعلية عبر **WebView** وجسر (Bridge) للتواصل مع طبقة Kotlin عبر `AndroidInterface`.
 
-> 🏢 **النشاط التجاري:** قابل للتخصيص عبر شاشة الإعدادات  
-> 📦 **Package:** `com.aistudio.dieselstationsms.kxmpzq`  
+> 🏢 **النشاط التجاري:** تفعيل خدمات شركات الاتصالات
+> 📦 **Application ID:** `com.aistudio.telecomactivation`
+> 🧩 **Kotlin namespace:** `com.aistudio.dieselstationsms.kxmpzq` (مسار الشيفرة الداخلي)
 > 🎯 **Min SDK:** 21 (Android 5.0 Lollipop) | **Target SDK:** 34 (Android 14)  
 > 🗄️ **Database:** SQLite  
 > 🌐 **UI:** HTML/CSS/JS داخل WebView

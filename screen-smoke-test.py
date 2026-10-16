@@ -18,8 +18,15 @@ processor = read("app/src/main/java/com/aistudio/dieselstationsms/kxmpzq/SmsComm
 analysis = read("app/src/main/java/com/aistudio/dieselstationsms/kxmpzq/SmsTextAnalysis.kt")
 store = read("app/src/main/java/com/aistudio/dieselstationsms/kxmpzq/SmsActivationStore.kt")
 manifest = read("app/src/main/AndroidManifest.xml")
+gradle_build = read("app/build.gradle.kts")
+strings = read("app/src/main/res/values/strings.xml")
 
 checks = {
+    "installer label and application id identify the telecom activation app": (
+        '<string name="app_name">تفعيل خدمات شركات الاتصالات</string>' in strings
+        and 'applicationId = "com.aistudio.telecomactivation"' in gradle_build
+        and 'android:label="@string/app_name"' in manifest
+    ),
     "bank name/account/sender/balance and provider settings are on the settings screen": all(
         f'id="{element}"' in html
         for element in (

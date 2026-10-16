@@ -97,10 +97,10 @@ class SMSService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "خدمة المحطة",
+                getString(R.string.service_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "قناة إشعارات خدمة الخادم المحلي"
+                description = getString(R.string.service_channel_description)
             }
             val nm = getSystemService(NotificationManager::class.java)
             nm?.createNotificationChannel(channel)
@@ -109,7 +109,7 @@ class SMSService : Service() {
 
     private fun startForegroundService() {
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("⛽ محطة أبو أحمد")
+            .setContentTitle(getString(R.string.service_notification_title))
             .setContentText("الخادم المحلي يعمل على المنفذ $currentPort")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setPriority(NotificationCompat.PRIORITY_LOW)
