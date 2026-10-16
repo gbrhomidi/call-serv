@@ -283,7 +283,7 @@ jobs:
           build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           signer_output="$("$build_tools/apksigner" verify --verbose --print-certs "$apk_path")"
           printf '%s\n' "$signer_output"
-          actual="$(printf '%s\n' "$signer_output" | awk -F': ' '/Signer #1 certificate SHA-256 digest:/ { print tolower($2); exit }' | tr -d ':[:space:]')"
+          actual="$(printf '%s\n' "$signer_output" | awk -F': ' '/certificate SHA-256 digest:/ { print tolower($NF); exit }' | tr -d ':[:space:]')"
           expected="$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
           if [ -z "$expected" ] || [ "$actual" != "$expected" ]; then
             echo "::error::Signed APK fingerprint does not match EXPECTED_CERT_SHA256."
