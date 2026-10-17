@@ -27,18 +27,28 @@ internal object SmsCommandProcessor {
         val helper = DatabaseHelper.getInstance(context)
         val store = SmsActivationStore(context)
         val normalizedSender = SmsTextAnalysis.normalizePhone(sender)
-        val bankSender = SmsTextAnalysis.normalizePhone(helper.getSetting("system_bank_sender_phone"))
+        if (helper.getSetting("sms_enabled") == "false" || helper.getSetting("app_active") == "false") {
+            helper.logSms(sender, body, "received", "ignored: SMS or application disabled")
+            return
+        }
+        val bank = helper.getFinancialInstitutionBySender(sender)
+        val legacyBankSender = SmsTextAnalysis.normalizePhone(helper.getSetting("system_bank_sender_phone"))
         val providerSender = SmsTextAnalysis.normalizePhone(helper.getSetting("activation_provider_phone"))
+        val telecomCompanies = helper.getTelecomCompanies()
+        val configuredProvider = (0 until telecomCompanies.length()).any { index ->
+            val telecom = telecomCompanies.optJSONObject(index)
+            telecom != null && SmsTextAnalysis.normalizePhone(telecom.optString("balance_phone")) == normalizedSender
+        }
 
-        if (bankSender.isNotBlank() && normalizedSender == bankSender) {
-            val bankName = helper.getSetting("system_bank_name")
+        if (bank != null || (legacyBankSender.isNotBlank() && normalizedSender == legacyBankSender)) {
+            val bankName = bank?.optString("name")?.ifBlank { helper.getSetting("system_bank_name") } ?: helper.getSetting("system_bank_name")
             val notice = SmsTextAnalysis.parseBankNotice(body, bankName)
             if (notice == null) {
                 Log.w(TAG, "Bank payment SMS ignored: unrecognized notice format")
                 helper.logSms(sender, body, "bank_notice", "ignored: invalid bank format")
                 return
             }
-            val request = store.acceptBankPayment(sender, bankName, notice)
+            val request = store.acceptBankPayment(sender, bankName, notice, bank?.optString("trusted_sender"), bankName)
             if (request == null) {
                 Log.w(TAG, "Bank payment SMS rejected: strict reconciliation mismatch")
                 helper.logSms(sender, body, "bank_notice", "rejected: strict reconciliation mismatch")
@@ -51,14 +61,14 @@ internal object SmsCommandProcessor {
             return
         }
 
-        if (providerSender.isNotBlank() && normalizedSender == providerSender) {
+        if ((providerSender.isNotBlank() && normalizedSender == providerSender) || configuredProvider) {
             handleProviderMessage(context, sender, body, store, helper)
             return
         }
 
         val customer = helper.getCustomerByPhone(sender)
-        if (customer == null || customer.optString("status", "active") != "active") {
-            helper.logSms(sender, body, "received", "ignored: unknown or inactive customer")
+        if (customer == null || customer.optString("status", "active") != "active" || customer.optInt("is_blocked", 0) == 1) {
+            helper.logSms(sender, body, "received", if (customer?.optInt("is_blocked", 0) == 1) "ignored: customer blocked" else "ignored: unknown or inactive customer")
             return
         }
         helper.logSms(sender, body, "received", "processing")

@@ -34,7 +34,8 @@ internal class SmsActivationStore(context: Context) {
         val amountCents = decimalToCents(service.optDouble("price")) ?: 0L
         val normalizedPhone = SmsTextAnalysis.normalizePhone(phone)
         val command = service.optString("activation_command", "").trim()
-        val providerPhone = SmsTextAnalysis.normalizePhone(helper.getSetting("activation_provider_phone"))
+        val telecom = helper.getTelecomCompanyById(service.optInt("telecom_company_id", 0))
+        val providerPhone = SmsTextAnalysis.normalizePhone(telecom?.optString("balance_phone").orEmpty().ifBlank { helper.getSetting("activation_provider_phone") })
         val now = System.currentTimeMillis()
         val result = JSONObject()
         if (customerId <= 0 || serviceId <= 0 || amountCents <= 0) return result.put("error", "بيانات الطلب غير صالحة")
@@ -106,10 +107,10 @@ internal class SmsActivationStore(context: Context) {
     }
 
     /** Strict bank reconciliation: all configured identifiers and amount/balance arithmetic must match. */
-    fun acceptBankPayment(sender: String, bankNameInSms: String, notice: SmsTextAnalysis.BankNotice): JSONObject? {
+    fun acceptBankPayment(sender: String, bankNameInSms: String, notice: SmsTextAnalysis.BankNotice, configuredSender: String? = null, configuredBank: String? = null): JSONObject? {
         val now = System.currentTimeMillis()
-        val expectedSender = SmsTextAnalysis.normalizePhone(helper.getSetting("system_bank_sender_phone"))
-        val expectedBank = SmsTextAnalysis.normalize(helper.getSetting("system_bank_name"))
+        val expectedSender = SmsTextAnalysis.normalizePhone(configuredSender?.ifBlank { helper.getSetting("system_bank_sender_phone") } ?: helper.getSetting("system_bank_sender_phone"))
+        val expectedBank = SmsTextAnalysis.normalize(configuredBank?.ifBlank { helper.getSetting("system_bank_name") } ?: helper.getSetting("system_bank_name"))
         if (expectedSender.length < 7 || SmsTextAnalysis.normalizePhone(sender) != expectedSender) return null
         if (expectedBank.isBlank() || SmsTextAnalysis.normalize(bankNameInSms) != expectedBank) return null
         if (notice.amountCents <= 0L) return null

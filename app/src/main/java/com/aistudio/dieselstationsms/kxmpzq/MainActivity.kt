@@ -559,15 +559,15 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun getPersistentSetting(key: String): String {
-            val allowed = setOf("system_bank_name", "system_bank_account_name", "system_bank_sender_phone", "activation_provider_phone", "activation_provider_balance", "supplier_balance_query_sms")
+            val allowed = setOf("system_bank_name", "system_bank_account_name", "system_bank_sender_phone", "activation_provider_phone", "activation_provider_balance", "supplier_balance_query_sms", "sms_enabled", "app_active")
             if (key !in allowed) return ""
             return try { DatabaseHelper.getInstance(context).getSetting(key) } catch (_: Exception) { "" }
         }
 
         @JavascriptInterface
         fun setPersistentSetting(key: String, value: String): Boolean {
-            val allowed = setOf("system_bank_name", "system_bank_account_name", "system_bank_sender_phone", "activation_provider_phone", "activation_provider_balance", "supplier_balance_query_sms")
-            if (key !in allowed || value.length > 200) return false
+            val allowed = setOf("system_bank_name", "system_bank_account_name", "system_bank_sender_phone", "activation_provider_phone", "activation_provider_balance", "supplier_balance_query_sms", "sms_enabled", "app_active")
+            if (key !in allowed || value.length > 200 || (key in setOf("sms_enabled", "app_active") && value !in setOf("true", "false"))) return false
             return try { DatabaseHelper.getInstance(context).setSetting(key, value.trim()) } catch (_: Exception) { false }
         }
 
@@ -578,7 +578,7 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun setServiceActivationTemplate(serviceCode: String, command: String): Boolean {
-            if (serviceCode.length > 40 || command.length > 200 || !command.contains(Regex("(?i)\\(\\s*phone\\s*\\)|\\{\\{?\\s*phone\\s*}?\\}|%phone%|\\bphone\\b"))) return false
+            if (serviceCode.length > 40 || command.length > 200 || SmsTextAnalysis.buildUssdCommand(command, "777000001") == null) return false
             return try {
                 val db = DatabaseHelper.getInstance(context)
                 db.getServiceByCode(serviceCode) ?: return false

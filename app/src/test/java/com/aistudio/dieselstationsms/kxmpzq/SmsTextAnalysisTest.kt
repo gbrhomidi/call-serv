@@ -66,6 +66,14 @@ class SmsTextAnalysisTest {
     }
 
     @Test
+    fun substitutesPhoneInAllSupportedPlaceholderFormsWithoutRegexErrors() {
+        val expected = "*123*777000001#"
+        listOf("*(phone)#", "*{phone}#", "*{{ phone }}#", "*%phone%#", "*phone#").forEach { template ->
+            assertEquals(expected, SmsTextAnalysis.buildUssdCommand(template, "777000001"))
+        }
+    }
+
+    @Test
     fun parsesArabicThousandsAndDecimalSeparatorsWithoutTruncatingCents() {
         val notice = SmsTextAnalysis.parseBankNotice(
             "مصرف الأمل\nمن حساب: أحمد محمد\nلكم: ٢٬٠٠٠٫٥٠ ر.ي.\nالرصيد لكم: ٦٬٠٨٥٫٠٦ ر.ي.",

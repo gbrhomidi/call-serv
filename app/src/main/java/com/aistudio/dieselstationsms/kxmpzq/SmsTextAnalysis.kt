@@ -47,9 +47,15 @@ internal object SmsTextAnalysis {
         if (template.isBlank() || phone.isBlank()) return null
         val normalizedPhone = normalizePhone(phone)
         if (normalizedPhone.length < 7) return null
-        val marker = Regex("(?i)\\(\\s*phone\\s*\\)|\\{\\{?\\s*phone\\s*}?\\}|%phone%|\\bphone\\b")
-        if (!marker.containsMatchIn(template)) return null
-        val command = marker.replace(template) { normalizedPhone }
+        val markers = listOf(
+            Regex("\\(\\s*phone\\s*\\)", RegexOption.IGNORE_CASE),
+            Regex("\\{\\{\\s*phone\\s*\\}\\}", RegexOption.IGNORE_CASE),
+            Regex("\\{\\s*phone\\s*\\}", RegexOption.IGNORE_CASE),
+            Regex("%phone%", RegexOption.IGNORE_CASE),
+            Regex("\\bphone\\b", RegexOption.IGNORE_CASE)
+        )
+        val marker = markers.firstOrNull { it.containsMatchIn(template) } ?: return null
+        val command = marker.replaceFirst(template, normalizedPhone)
         if (command.length !in 3..100 || !command.matches(Regex("[0-9*#+,;.\\-]+"))) return null
         return command
     }

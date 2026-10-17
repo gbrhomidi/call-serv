@@ -45,7 +45,7 @@ class DatabaseHelper(private val context: Context) :
     companion object {
         private const val TAG = "DatabaseHelper"
         private const val DB_NAME = "telecom_activator.db"
-        const val VERSION = 3
+        const val VERSION = 4
 
         // ==================== Thread-Safe Date Formats ====================
         private val dateFormatThreadLocal = ThreadLocal<SimpleDateFormat>()
@@ -121,6 +121,16 @@ class DatabaseHelper(private val context: Context) :
             db.update("customers", ContentValues().apply { put("is_deleted", 1); put("status", "inactive") }, "customer_code IN ('CUS-001','CUS-002','CUS-003','CUS-004')", null)
             db.update("suppliers", ContentValues().apply { put("is_deleted", 1); put("status", "inactive") }, "supplier_code IN ('SUP-001','SUP-002','SUP-003')", null)
         }
+        if (oldVersion < 4) {
+            db.execSQL("ALTER TABLE customers ADD COLUMN is_blocked INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE services ADD COLUMN telecom_company_id INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE suppliers ADD COLUMN institution_type TEXT NOT NULL DEFAULT 'bank'")
+            db.execSQL("ALTER TABLE suppliers ADD COLUMN bank_account_name TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE suppliers ADD COLUMN trusted_sender TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE suppliers ADD COLUMN ussd_result_phone TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE suppliers ADD COLUMN balance_query_sms TEXT NOT NULL DEFAULT ''")
+            db.execSQL("CREATE TABLE IF NOT EXISTS telecom_companies (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, ussd_phone TEXT NOT NULL DEFAULT '', prefix1 TEXT NOT NULL DEFAULT '', prefix2 TEXT NOT NULL DEFAULT '', prefix3 TEXT NOT NULL DEFAULT '', prefix4 TEXT NOT NULL DEFAULT '', balance_phone TEXT NOT NULL DEFAULT '', is_deleted INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)")
+        }
         Log.d(TAG, "Upgrading database from $oldVersion to $newVersion")
     }
 
@@ -137,6 +147,7 @@ class DatabaseHelper(private val context: Context) :
     private fun createAllTables(db: SQLiteDatabase) {
         createCustomersTable(db)
         createServicesTable(db)
+        createTelecomCompaniesTable(db)
         createSuppliersTable(db)
         createTransfersTable(db)
         createActivationsTable(db)
@@ -174,6 +185,7 @@ class DatabaseHelper(private val context: Context) :
                 notes TEXT,
                 details TEXT,
                 status VARCHAR(20) DEFAULT 'active',          -- active, inactive, blocked
+                is_blocked INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 is_deleted INTEGER DEFAULT 0,
@@ -203,13 +215,23 @@ class DatabaseHelper(private val context: Context) :
                 status VARCHAR(20) DEFAULT 'active',          -- active, inactive
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                is_deleted INTEGER DEFAULT 0
+                is_deleted INTEGER DEFAULT 0,
+                telecom_company_id INTEGER NOT NULL DEFAULT 0
             )
         """)
         Log.d(TAG, "Services table created")
     }
 
-    // ==================== 2.3 الموردين والحوالات ====================
+    private fun createTelecomCompaniesTable(db: SQLiteDatabase) {
+        db.execSQL("""CREATE TABLE IF NOT EXISTS telecom_companies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE,
+            ussd_phone TEXT NOT NULL DEFAULT '', prefix1 TEXT NOT NULL DEFAULT '',
+            prefix2 TEXT NOT NULL DEFAULT '', prefix3 TEXT NOT NULL DEFAULT '', prefix4 TEXT NOT NULL DEFAULT '',
+            balance_phone TEXT NOT NULL DEFAULT '', is_deleted INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
+    }
+
+    // ==================== 2.3 البنوك والحوالات والمحافظ ====================
 
     private fun createSuppliersTable(db: SQLiteDatabase) {
         db.execSQL("""
@@ -223,6 +245,11 @@ class DatabaseHelper(private val context: Context) :
                 phone3 VARCHAR(20),
                 our_balance DECIMAL(15,2) DEFAULT 0,           -- رصيدنا لديهم
                 their_balance DECIMAL(15,2) DEFAULT 0,          -- رصيدهم لدينا
+                institution_type TEXT NOT NULL DEFAULT 'bank',
+                bank_account_name TEXT NOT NULL DEFAULT '',
+                trusted_sender TEXT NOT NULL DEFAULT '',
+                ussd_result_phone TEXT NOT NULL DEFAULT '',
+                balance_query_sms TEXT NOT NULL DEFAULT '',
                 status VARCHAR(20) DEFAULT 'active',           -- active, inactive
                 details TEXT,
                 notes TEXT,
@@ -606,6 +633,7 @@ class DatabaseHelper(private val context: Context) :
                 put("notes", data.optString("notes", ""))
                 put("details", data.optString("details", ""))
                 put("status", data.optString("status", "active"))
+                put("is_blocked", if (data.optBoolean("is_blocked", false)) 1 else 0)
                 put("created_at", getCurrentDateTime())
                 put("updated_at", getCurrentDateTime())
             }
@@ -637,6 +665,7 @@ class DatabaseHelper(private val context: Context) :
                 if (data.has("notes") && !data.isNull("notes")) put("notes", data.optString("notes"))
                 if (data.has("details") && !data.isNull("details")) put("details", data.optString("details"))
                 if (data.has("status") && !data.isNull("status")) put("status", data.optString("status"))
+                if (data.has("is_blocked")) put("is_blocked", if (data.optBoolean("is_blocked")) 1 else 0)
                 put("updated_at", getCurrentDateTime())
             }
             if (values.size() <= 1) return 0
@@ -849,6 +878,7 @@ class DatabaseHelper(private val context: Context) :
                 put("activation_code", data.optString("activation_code", ""))
                 put("activation_command", data.optString("activation_command", ""))
                 put("provider", data.optString("provider", ""))
+                put("telecom_company_id", data.optInt("telecom_company_id", 0))
                 put("description", data.optString("description", ""))
                 put("notes", data.optString("notes", ""))
                 put("is_active", if (data.optBoolean("is_active", true)) 1 else 0)
@@ -880,6 +910,7 @@ class DatabaseHelper(private val context: Context) :
                 if (data.has("activation_code") && !data.isNull("activation_code")) put("activation_code", data.optString("activation_code"))
                 if (data.has("activation_command") && !data.isNull("activation_command")) put("activation_command", data.optString("activation_command"))
                 if (data.has("provider") && !data.isNull("provider")) put("provider", data.optString("provider"))
+                if (data.has("telecom_company_id")) put("telecom_company_id", data.optInt("telecom_company_id"))
                 if (data.has("description") && !data.isNull("description")) put("description", data.optString("description"))
                 if (data.has("notes") && !data.isNull("notes")) put("notes", data.optString("notes"))
                 if (data.has("is_active")) put("is_active", if (data.optBoolean("is_active")) 1 else 0)
@@ -1058,6 +1089,11 @@ class DatabaseHelper(private val context: Context) :
                 put("phone3", normalizePhone(data.optString("phone3", "")))
                 put("our_balance", data.optDouble("our_balance", 0.0))
                 put("their_balance", data.optDouble("their_balance", 0.0))
+                put("institution_type", data.optString("institution_type", "bank"))
+                put("bank_account_name", data.optString("bank_account_name", ""))
+                put("trusted_sender", normalizePhone(data.optString("trusted_sender", "")))
+                put("ussd_result_phone", data.optString("ussd_result_phone", ""))
+                put("balance_query_sms", data.optString("balance_query_sms", ""))
                 put("status", data.optString("status", "active"))
                 put("details", data.optString("details", ""))
                 put("notes", data.optString("notes", ""))
@@ -1087,6 +1123,11 @@ class DatabaseHelper(private val context: Context) :
                 if (data.has("phone3") && !data.isNull("phone3")) put("phone3", normalizePhone(data.optString("phone3")))
                 if (data.has("our_balance") && !data.isNull("our_balance")) put("our_balance", data.optDouble("our_balance"))
                 if (data.has("their_balance") && !data.isNull("their_balance")) put("their_balance", data.optDouble("their_balance"))
+                if (data.has("institution_type")) put("institution_type", data.optString("institution_type"))
+                if (data.has("bank_account_name")) put("bank_account_name", data.optString("bank_account_name"))
+                if (data.has("trusted_sender")) put("trusted_sender", normalizePhone(data.optString("trusted_sender")))
+                if (data.has("ussd_result_phone")) put("ussd_result_phone", data.optString("ussd_result_phone"))
+                if (data.has("balance_query_sms")) put("balance_query_sms", data.optString("balance_query_sms"))
                 if (data.has("status") && !data.isNull("status")) put("status", data.optString("status"))
                 if (data.has("details") && !data.isNull("details")) put("details", data.optString("details"))
                 if (data.has("notes") && !data.isNull("notes")) put("notes", data.optString("notes"))
@@ -2090,6 +2131,28 @@ class DatabaseHelper(private val context: Context) :
     // ================================================================
     // 11. دوال الإعدادات
     // ================================================================
+
+    fun getTelecomCompanyById(id: Int): JSONObject? = readableDatabase.rawQuery("SELECT * FROM telecom_companies WHERE id=? AND is_deleted=0", arrayOf(id.toString())).use { if (it.moveToFirst()) cursorToJsonObject(it) else null }
+
+    fun getFinancialInstitutionBySender(phone: String): JSONObject? {
+        val normalized = normalizePhone(phone)
+        return readableDatabase.rawQuery("SELECT * FROM suppliers WHERE is_deleted=0 AND status='active' AND (trusted_sender=? OR phone1=?) LIMIT 1", arrayOf(normalized, normalized)).use { if (it.moveToFirst()) cursorToJsonObject(it) else null }
+    }
+
+    fun getTelecomCompanies(): JSONArray = readableDatabase.rawQuery("SELECT * FROM telecom_companies WHERE is_deleted=0 ORDER BY name", null).use { cursorToJsonArray(it) }
+
+    fun saveTelecomCompany(data: JSONObject): Long {
+        val id = data.optInt("id", 0)
+        val values = ContentValues().apply {
+            put("name", data.optString("name").trim()); put("ussd_phone", data.optString("ussd_phone").trim())
+            for (i in 1..4) put("prefix$i", data.optString("prefix$i").trim())
+            put("balance_phone", data.optString("balance_phone").trim()); put("updated_at", getCurrentDateTime())
+        }
+        return if (id > 0) { writableDatabase.update("telecom_companies", values, "id=? AND is_deleted=0", arrayOf(id.toString())).toLong().let { if (it > 0) id.toLong() else -1L } }
+        else writableDatabase.insert("telecom_companies", null, values)
+    }
+
+    fun deleteTelecomCompany(id: Int): Int = writableDatabase.update("telecom_companies", ContentValues().apply { put("is_deleted", 1) }, "id=?", arrayOf(id.toString()))
 
     fun getSetting(key: String): String {
         dbLock.lock()

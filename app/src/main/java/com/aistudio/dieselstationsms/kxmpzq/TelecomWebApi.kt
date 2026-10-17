@@ -26,6 +26,9 @@ internal class TelecomWebApi(context: Context) {
                 "get_dashboard" -> dashboard()
                 "get_daily_sms" -> dailySms()
                 "get_services" -> mapArray(db.getServices(), ::serviceForUi)
+                "get_telecom_companies" -> db.getTelecomCompanies()
+                "save_telecom_company" -> saveTelecomCompany(params)
+                "delete_telecom_company" -> deleteTelecomCompany(params)
                 "save_service" -> saveService(params)
                 "delete_service" -> deleteService(params)
                 "get_customers" -> mapArray(db.getCustomers(), ::customerForUi)
@@ -103,6 +106,7 @@ internal class TelecomWebApi(context: Context) {
             put("activation_code", code)
             put("activation_command", input.optString("activation_command").trim())
             put("provider", input.optString("provider").trim())
+            put("telecom_company_id", input.optInt("telecom_company_id", 0))
             put("description", input.optString("details"))
             put("status", status)
             put("is_active", status == "active")
@@ -133,6 +137,7 @@ internal class TelecomWebApi(context: Context) {
             put("current_balance", input.optDouble("balance", 0.0))
             put("notes", input.optString("notes"))
             put("status", input.optString("status", "active"))
+            put("is_blocked", input.optBoolean("is_blocked", false))
         }
         val savedId = if (id > 0) {
             if (db.updateCustomer(id, values) == 0) throw IllegalArgumentException("العميل غير موجود")
@@ -156,6 +161,11 @@ internal class TelecomWebApi(context: Context) {
             put("phone3", input.optString("phone3"))
             put("our_balance", input.optDouble("ourBalance", 0.0))
             put("their_balance", input.optDouble("theirBalance", 0.0))
+            put("institution_type", input.optString("institution_type", "bank"))
+            put("bank_account_name", input.optString("bank_account_name"))
+            put("trusted_sender", input.optString("trusted_sender"))
+            put("ussd_result_phone", input.optString("ussd_result_phone"))
+            put("balance_query_sms", input.optString("balance_query_sms"))
             put("status", input.optString("status", "active"))
             put("notes", input.optString("notes"))
         }
@@ -165,6 +175,21 @@ internal class TelecomWebApi(context: Context) {
         } else db.addSupplier(values)
         if (savedId <= 0) throw IllegalStateException("تعذر حفظ المورد؛ تحقق من أن رقم الهاتف غير مستخدم")
         return JSONObject().put("id", savedId).put("name", name).put("phone1", phone)
+    }
+
+    private fun saveTelecomCompany(input: JSONObject): JSONObject {
+        val name = input.optString("name").trim()
+        require(name.isNotBlank() && name.length <= 120) { "اسم شركة الاتصالات مطلوب" }
+        for (i in 1..4) require(input.optString("prefix$i").length <= 12) { "بادئة الهاتف أطول من المسموح" }
+        val id = db.saveTelecomCompany(input)
+        if (id <= 0) throw IllegalStateException("تعذر حفظ شركة الاتصالات؛ تحقق من عدم تكرار الاسم")
+        return JSONObject().put("id", id).put("name", name)
+    }
+
+    private fun deleteTelecomCompany(params: JSONObject): JSONObject {
+        val id = requireId(params)
+        if (db.deleteTelecomCompany(id) == 0) throw IllegalArgumentException("شركة الاتصالات غير موجودة")
+        return JSONObject().put("id", id)
     }
 
     private fun deleteService(params: JSONObject): JSONObject {
@@ -198,6 +223,7 @@ internal class TelecomWebApi(context: Context) {
         put("service_type", row.optString("service_type"))
         put("provider", row.optString("provider"))
         put("activation_command", row.optString("activation_command"))
+        put("telecom_company_id", row.optInt("telecom_company_id", 0))
     }
 
     private fun customerForUi(row: JSONObject) = JSONObject(row.toString()).apply {
@@ -206,11 +232,17 @@ internal class TelecomWebApi(context: Context) {
         put("allowCredit", row.optInt("allow_credit", 0) == 1)
         put("creditLimit", row.optDouble("credit_limit", 0.0))
         put("balance", row.optDouble("current_balance", 0.0))
+        put("is_blocked", row.optInt("is_blocked", 0) == 1)
     }
 
     private fun supplierForUi(row: JSONObject) = JSONObject(row.toString()).apply {
         put("ourBalance", row.optDouble("our_balance", 0.0))
         put("theirBalance", row.optDouble("their_balance", 0.0))
+        put("institution_type", row.optString("institution_type", "bank"))
+        put("bank_account_name", row.optString("bank_account_name"))
+        put("trusted_sender", row.optString("trusted_sender"))
+        put("ussd_result_phone", row.optString("ussd_result_phone"))
+        put("balance_query_sms", row.optString("balance_query_sms"))
     }
 
     private fun smsForUi(row: JSONObject) = JSONObject().apply {
@@ -266,7 +298,9 @@ internal class TelecomWebApi(context: Context) {
     private fun successMessage(action: String): String? = when (action) {
         "save_service" -> "تم حفظ الخدمة"
         "save_customer" -> "تم حفظ العميل"
-        "save_supplier" -> "تم حفظ المورد"
+        "save_supplier" -> "تم حفظ بيانات الجهة المالية"
+        "save_telecom_company" -> "تم حفظ شركة الاتصالات"
+        "delete_telecom_company" -> "تم حذف شركة الاتصالات"
         "delete_service", "delete_customer", "delete_supplier", "delete_sms" -> "تم الحذف"
         else -> null
     }
