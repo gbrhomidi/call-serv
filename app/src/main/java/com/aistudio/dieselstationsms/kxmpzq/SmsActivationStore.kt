@@ -33,9 +33,12 @@ internal class SmsActivationStore(context: Context) {
         val serviceId = service.optInt("id")
         val amountCents = decimalToCents(service.optDouble("price")) ?: 0L
         val normalizedPhone = SmsTextAnalysis.normalizePhone(phone)
+        // Older databases stored the complete USSD template in activation_code.
+        // Prefer the new field, but keep those user-created services usable after upgrade.
         val command = service.optString("activation_command", "").trim()
+            .ifBlank { service.optString("activation_code", "").trim() }
         val telecom = helper.getTelecomCompanyById(service.optInt("telecom_company_id", 0))
-        val providerPhone = SmsTextAnalysis.normalizePhone(telecom?.optString("balance_phone").orEmpty().ifBlank { helper.getSetting("activation_provider_phone") })
+        val providerPhone = providerPhone(telecom)
         val now = System.currentTimeMillis()
         val result = JSONObject()
         if (customerId <= 0 || serviceId <= 0 || amountCents <= 0) return result.put("error", "بيانات الطلب غير صالحة")
@@ -104,6 +107,17 @@ internal class SmsActivationStore(context: Context) {
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
         return result
+    }
+
+    /** Resolve the trusted sender for provider result SMS for new and legacy records. */
+    private fun providerPhone(telecom: JSONObject?): String {
+        val candidates = listOf(
+            telecom?.optString("balance_phone").orEmpty(),
+            telecom?.optString("ussd_phone").orEmpty(),
+            helper.getSetting("activation_provider_phone")
+        )
+        return candidates.firstOrNull { SmsTextAnalysis.normalizePhone(it).length >= 7 }
+            ?.let(SmsTextAnalysis::normalizePhone).orEmpty()
     }
 
     /** Strict bank reconciliation: all configured identifiers and amount/balance arithmetic must match. */

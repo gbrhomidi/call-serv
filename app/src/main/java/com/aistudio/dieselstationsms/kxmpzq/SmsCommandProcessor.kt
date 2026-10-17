@@ -37,7 +37,10 @@ internal object SmsCommandProcessor {
         val telecomCompanies = helper.getTelecomCompanies()
         val configuredProvider = (0 until telecomCompanies.length()).any { index ->
             val telecom = telecomCompanies.optJSONObject(index)
-            telecom != null && SmsTextAnalysis.normalizePhone(telecom.optString("balance_phone")) == normalizedSender
+            telecom != null && listOf(
+                telecom.optString("balance_phone"),
+                telecom.optString("ussd_phone")
+            ).any { SmsTextAnalysis.normalizePhone(it) == normalizedSender }
         }
 
         if (bank != null || (legacyBankSender.isNotBlank() && normalizedSender == legacyBankSender)) {

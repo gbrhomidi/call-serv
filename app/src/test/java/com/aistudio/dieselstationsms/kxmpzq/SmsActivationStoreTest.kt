@@ -269,6 +269,27 @@ class SmsActivationStoreTest {
     }
 
     @Test
+    fun `legacy activation code is used when activation command is absent`() {
+        helper.setSetting("activation_provider_phone", "777000001")
+        val customer = customer(name = "خدمة قديمة", phone = "777888991", allowCredit = true, creditLimit = 100.0)
+        val code = "LEGACY-${System.nanoTime()}"
+        val serviceId = helper.addService(JSONObject()
+            .put("service_code", code)
+            .put("service_name", "باقة ماكس300")
+            .put("service_name_ar", "باقة ماكس300")
+            .put("service_type", "package")
+            .put("price", 5.0)
+            .put("activation_code", "*300*(phone)#")
+            .put("activation_command", "")
+            .put("is_active", true)
+            .put("status", "active"))
+        val request = store.createRequest(customer, helper.getServiceById(serviceId.toInt())!!, customer.getString("phone1"))
+        assertFalse(request.has("error"))
+        assertEquals("*300*777888991#", request.getString("activation_command"))
+        assertEquals("777000001", request.getString("provider_phone"))
+    }
+
+    @Test
     fun `incoming message claiming is idempotent for the same sender body and timestamp`() {
         val store = SmsActivationStore(context)
         assertTrue(store.claimIncoming("+967777123456", "تفعيل باقة", 123_456L))

@@ -63,8 +63,8 @@ jobs:
             echo "::error::EXPECTED_CERT_SHA256 must contain a 64-character SHA-256 fingerprint, with or without colons."
             exit 1
           fi
-          if [ "$GITHUB_REF" = "refs/heads/main" ] && [ -z "$expected" ]; then
-            echo "::error::Set EXPECTED_CERT_SHA256 from the first trusted verification summary before producing a production Release APK."
+          if [ -z "$expected" ]; then
+            echo "::error::Set EXPECTED_CERT_SHA256 before producing an installable or upgrade APK."
             exit 1
           fi
           echo "All required signing secret names are present; alias format is valid."
@@ -170,62 +170,16 @@ jobs:
       - name: Compile minified fresh-install APK
         run: ./gradlew :app:assembleMinified --no-daemon
 
-      # Feature-branch APKs are minified, debug-key signed, and for fresh installs only.
-      - name: Verify and prepare fresh-install APK from requested branch
-        if: >-
-          (github.ref == 'refs/heads/feat/sms-activation-bank-reconciliation' && github.event_name != 'pull_request') ||
-          (github.event_name == 'pull_request' && github.head_ref == 'feat/sms-activation-bank-reconciliation')
-        env:
-          APK_PATH: app/build/outputs/apk/minified/app-minified.apk
-        run: |
-          set -euo pipefail
-          test -s "$APK_PATH" || { echo "::error::Minified APK is missing or empty."; exit 1; }
-          apk_bytes="$(stat -c '%s' "$APK_PATH")"
-          max_bytes=$((8 * 1024 * 1024))
-          if [ "$apk_bytes" -gt "$max_bytes" ]; then
-            echo "::error::Minified APK exceeds the 8 MiB size budget (${apk_bytes} bytes). Review dependencies/resources before raising this limit."
-            exit 1
-          fi
-          echo "Optimized APK size: ${apk_bytes} bytes (limit: ${max_bytes} bytes)."
-          build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
-          test -x "$build_tools/apksigner" || { echo "::error::apksigner was not found."; exit 1; }
-          test -x "$build_tools/aapt" || { echo "::error::aapt was not found."; exit 1; }
-          "$build_tools/apksigner" verify --verbose "$APK_PATH"
-          AAPT_PATH="$build_tools/aapt" python3 - <<'PY'
-          import os, re, subprocess, sys
-          output = subprocess.check_output([os.environ["AAPT_PATH"], "dump", "badging", os.environ["APK_PATH"]], text=True)
-          match = re.search(r"^package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']*)'", output, re.MULTILINE)
-          if not match:
-             sys.exit("::error::Could not read package/version metadata from the APK.")
-          package, version_code, version_name = match.groups()
-          if package != "com.aistudio.telecomactivation":
-             sys.exit(f"::error::Unexpected applicationId: {package}")
-          if int(version_code) < 302:
-              sys.exit(f"::error::Expected versionCode >= 302, got {version_code}.")
-          print(f"Verified installable feature APK: {package}, versionCode={version_code}, versionName={version_name}")
-          PY
-          rm -rf feature-apk
-          mkdir -p feature-apk
-          cp "$APK_PATH" feature-apk/CallServ_SMS_Activation_FreshInstall.apk
-          (cd feature-apk && sha256sum CallServ_SMS_Activation_FreshInstall.apk > SHA256SUMS.txt)
-
-      - name: Upload installable APK from feature branch
-        if: >-
-          (github.ref == 'refs/heads/feat/sms-activation-bank-reconciliation' && github.event_name != 'pull_request') ||
-          (github.event_name == 'pull_request' && github.head_ref == 'feat/sms-activation-bank-reconciliation')
-        uses: actions/upload-artifact@v6
-        with:
-          name: CallServ_SMS_Activation_FreshInstall
-          path: |
-            feature-apk/CallServ_SMS_Activation_FreshInstall.apk
-            feature-apk/SHA256SUMS.txt
-          if-no-files-found: error
-          retention-days: 14
+      # The distributable APK is built in the release job with the pinned
+      # production key; a debug-signed feature APK must never be offered as an
+      # upgrade because Android rejects it as a package/signature conflict.
 
   release:
     name: Build Signed Upgrade APK
     needs: [validate, verify-secrets]
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: >-
+      (github.ref == 'refs/heads/main' && github.event_name != 'pull_request') ||
+      (github.ref == 'refs/heads/feat/sms-activation-bank-reconciliation' && github.event_name != 'pull_request')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -296,8 +250,8 @@ jobs:
           package, version_code, version_name = match.groups()
           if package != "com.aistudio.telecomactivation":
              sys.exit(f"::error::Unexpected applicationId: {package}")
-          if int(version_code) < 302:
-              sys.exit(f"::error::versionCode {version_code} is below the production baseline 302.")
+          if int(version_code) < 303:
+              sys.exit(f"::error::versionCode {version_code} is below the production baseline 303.")
           print(f"Verified production update APK: {package}, versionCode={version_code}, versionName={version_name}")
           PY
           echo "path=$apk_path" >> "$GITHUB_OUTPUT"
@@ -321,7 +275,8 @@ jobs:
       - name: Upload signed upgrade APK
         uses: actions/upload-artifact@v6
         with:
-          name: CallServ_SMS_Activation_Release
+          name: >-
+            ${{ github.ref == 'refs/heads/main' && 'CallServ_SMS_Activation_Release' || 'CallServ_SMS_Activation_Feature_Upgrade' }}
           path: |
             release-artifact/CallServ_SMS_Activation_Release.apk
             release-artifact/SHA256SUMS.txt
