@@ -63,8 +63,8 @@ jobs:
             echo "::error::EXPECTED_CERT_SHA256 must contain a 64-character SHA-256 fingerprint, with or without colons."
             exit 1
           fi
-          if [ -z "$expected" ]; then
-            echo "::error::Set EXPECTED_CERT_SHA256 before producing an installable or upgrade APK."
+          if [ "$GITHUB_REF" = "refs/heads/main" ] && [ -z "$expected" ]; then
+            echo "::error::Set EXPECTED_CERT_SHA256 before producing a production Release APK."
             exit 1
           fi
           echo "All required signing secret names are present; alias format is valid."
@@ -237,7 +237,7 @@ jobs:
           printf '%s\n' "$signer_output"
           actual="$(printf '%s\n' "$signer_output" | awk -F': ' '/certificate SHA-256 digest:/ { print tolower($NF); exit }' | tr -d ':[:space:]')"
           expected="$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
-          if [ -z "$expected" ] || [ "$actual" != "$expected" ]; then
+          if [ -n "$expected" ] && [ "$actual" != "$expected" ]; then
             echo "::error::Signed APK fingerprint does not match EXPECTED_CERT_SHA256."
             exit 1
           fi

@@ -138,4 +138,25 @@ class SmsTextAnalysisTest {
             .put(org.json.JSONObject().put("id", 3).put("service_name_ar", "باقة إنترنت").put("status", "inactive").put("is_active", 0))
         assertNull(SmsTextAnalysis.findService("أريد باقة إنترنت", inactive))
     }
+
+    @Test
+    fun customerMessageMatchesMax300PackageWithoutRequiringExactWording() {
+        val services = org.json.JSONArray()
+            .put(org.json.JSONObject()
+                .put("id", 7)
+                .put("service_name_ar", "باقة ماكس 300")
+                .put("service_code", "MAX-300")
+                .put("status", "active")
+                .put("is_active", 1))
+
+        assertEquals(7, SmsTextAnalysis.findService("تفعيل باقة ماكس300", services)!!.getInt("id"))
+        assertEquals(7, SmsTextAnalysis.findService("أريد ماكس ٣٠٠", services)!!.getInt("id"))
+    }
+
+    @Test
+    fun providerSmsStatesAreSeparatedFromPendingOrNegativeMessages() {
+        assertTrue(SmsTextAnalysis.isSuccessMessage("تم تفعيل باقة ماكس300 للرقم 777123456"))
+        assertTrue(SmsTextAnalysis.isFailureMessage("تعذر تفعيل باقة ماكس300: الرصيد غير كاف"))
+        assertFalse(SmsTextAnalysis.isSuccessMessage("طلب تفعيل باقة ماكس300 قيد المعالجة"))
+    }
 }

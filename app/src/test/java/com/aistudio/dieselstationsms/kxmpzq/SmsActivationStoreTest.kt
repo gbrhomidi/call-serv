@@ -287,6 +287,10 @@ class SmsActivationStoreTest {
         assertFalse(request.has("error"))
         assertEquals("*300*777888991#", request.getString("activation_command"))
         assertEquals("777000001", request.getString("provider_phone"))
+        val completed = store.completeSuccess(request.getLong("id"), "تم تفعيل باقة ماكس300 للرقم 777888991")
+        assertNotNull(completed)
+        assertEquals("success", completed!!.getString("status"))
+        assertEquals(1L, count("SELECT count(*) FROM activations WHERE service_id=$serviceId"))
     }
 
     @Test
