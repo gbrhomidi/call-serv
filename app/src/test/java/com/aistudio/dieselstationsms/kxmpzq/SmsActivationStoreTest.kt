@@ -285,7 +285,11 @@ class SmsActivationStoreTest {
             .put("status", "active"))
         val request = store.createRequest(customer, helper.getServiceById(serviceId.toInt())!!, customer.getString("phone1"))
         assertFalse(request.has("error"))
-        assertEquals("*300*777888991#", request.getString("activation_command"))
+        assertEquals("*300*(phone)#", request.getString("activation_command"))
+        assertEquals(
+            "*300*777888991#",
+            SmsTextAnalysis.buildUssdCommand(request.getString("activation_command"), customer.getString("phone1"))
+        )
         assertEquals("777000001", request.getString("provider_phone"))
         val completed = store.completeSuccess(request.getLong("id"), "تم تفعيل باقة ماكس300 للرقم 777888991")
         assertNotNull(completed)
