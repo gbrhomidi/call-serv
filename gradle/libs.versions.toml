@@ -52,8 +52,6 @@ robolectric = "4.14.1"
 roborazzi = "1.44.0"
 core = "1.6.1"                           # AndroidX Test Core
 runner = "1.6.2"                       # AndroidX Test Runner
-robolectric = "4.14.1"                 # اختبارات Android على JVM
-roborazzi = "1.39.0"                   # اختبارات لقطات اختيارية
 
 # ============================================================
 #  Network - الاتصال بالشبكة والخوادم
