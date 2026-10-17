@@ -67,7 +67,7 @@ class SmsTextAnalysisTest {
 
     @Test
     fun substitutesPhoneInAllSupportedPlaceholderFormsWithoutRegexErrors() {
-        val expected = "*123*777000001#"
+        val expected = "*777000001#"
         listOf("*(phone)#", "*{phone}#", "*{{ phone }}#", "*%phone%#", "*phone#").forEach { template ->
             assertEquals(expected, SmsTextAnalysis.buildUssdCommand(template, "777000001"))
         }

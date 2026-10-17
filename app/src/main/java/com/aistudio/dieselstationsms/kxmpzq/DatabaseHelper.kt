@@ -122,16 +122,24 @@ class DatabaseHelper(private val context: Context) :
             db.update("suppliers", ContentValues().apply { put("is_deleted", 1); put("status", "inactive") }, "supplier_code IN ('SUP-001','SUP-002','SUP-003')", null)
         }
         if (oldVersion < 4) {
-            db.execSQL("ALTER TABLE customers ADD COLUMN is_blocked INTEGER NOT NULL DEFAULT 0")
-            db.execSQL("ALTER TABLE services ADD COLUMN telecom_company_id INTEGER NOT NULL DEFAULT 0")
-            db.execSQL("ALTER TABLE suppliers ADD COLUMN institution_type TEXT NOT NULL DEFAULT 'bank'")
-            db.execSQL("ALTER TABLE suppliers ADD COLUMN bank_account_name TEXT NOT NULL DEFAULT ''")
-            db.execSQL("ALTER TABLE suppliers ADD COLUMN trusted_sender TEXT NOT NULL DEFAULT ''")
-            db.execSQL("ALTER TABLE suppliers ADD COLUMN ussd_result_phone TEXT NOT NULL DEFAULT ''")
-            db.execSQL("ALTER TABLE suppliers ADD COLUMN balance_query_sms TEXT NOT NULL DEFAULT ''")
-            db.execSQL("CREATE TABLE IF NOT EXISTS telecom_companies (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, ussd_phone TEXT NOT NULL DEFAULT '', prefix1 TEXT NOT NULL DEFAULT '', prefix2 TEXT NOT NULL DEFAULT '', prefix3 TEXT NOT NULL DEFAULT '', prefix4 TEXT NOT NULL DEFAULT '', balance_phone TEXT NOT NULL DEFAULT '', is_deleted INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)")
+            addColumnIfMissing(db, "customers", "is_blocked", "INTEGER NOT NULL DEFAULT 0")
+            addColumnIfMissing(db, "services", "telecom_company_id", "INTEGER NOT NULL DEFAULT 0")
+            addColumnIfMissing(db, "suppliers", "institution_type", "TEXT NOT NULL DEFAULT 'bank'")
+            addColumnIfMissing(db, "suppliers", "bank_account_name", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, "suppliers", "trusted_sender", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, "suppliers", "ussd_result_phone", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, "suppliers", "balance_query_sms", "TEXT NOT NULL DEFAULT ''")
+            createTelecomCompaniesTable(db)
         }
         Log.d(TAG, "Upgrading database from $oldVersion to $newVersion")
+    }
+
+    private fun addColumnIfMissing(db: SQLiteDatabase, table: String, column: String, definition: String) {
+        val exists = db.rawQuery("PRAGMA table_info($table)", null).use { cursor ->
+            val nameColumn = cursor.getColumnIndex("name")
+            nameColumn >= 0 && generateSequence { if (cursor.moveToNext()) cursor.getString(nameColumn) else null }.any { it == column }
+        }
+        if (!exists) db.execSQL("ALTER TABLE $table ADD COLUMN $column $definition")
     }
 
     override fun onConfigure(db: SQLiteDatabase) {
