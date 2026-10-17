@@ -7,8 +7,10 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
+import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.Writer
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.locks.ReentrantLock
@@ -37,15 +39,13 @@ import java.util.concurrent.locks.ReentrantLock
  * 14. audit_log              - سجل التدقيق
  * ═══════════════════════════════════════════════════════════════
  */
-class DatabaseHelper private constructor(context: Context) :
+class DatabaseHelper(private val context: Context) :
     SQLiteOpenHelper(context.applicationContext, DB_NAME, null, VERSION) {
-
-    private val appContext: Context = context.applicationContext
 
     companion object {
         private const val TAG = "DatabaseHelper"
         private const val DB_NAME = "telecom_activator.db"
-        const val VERSION = 2
+        const val VERSION = 4
 
         // ==================== Thread-Safe Date Formats ====================
         private val dateFormatThreadLocal = ThreadLocal<SimpleDateFormat>()
@@ -111,12 +111,35 @@ class DatabaseHelper private constructor(context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        Log.d(TAG, "Upgrading database from $oldVersion to $newVersion")
         if (oldVersion < 2) {
-            createTelecomProvidersTable(db)
-            createPaymentAccountsTable(db)
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_services_provider ON services(provider)")
+            createIndexes(db)
+            db.delete("system_settings", "setting_key=?", arrayOf("system_bank_expected_balance"))
         }
+        if (oldVersion < 3) {
+            // Remove only rows shipped by the old demo seed. User-created rows remain intact.
+            db.update("services", ContentValues().apply { put("is_deleted", 1); put("is_active", 0); put("status", "inactive") }, "service_code IN ('TOPUP-500','TOPUP-1000','TOPUP-2000','INTERNET-1GB','INTERNET-5GB','INTERNET-10GB','SMS-100','SMS-500','CALLS-100','CALLS-300','PACKAGE-GOLD','PACKAGE-SILVER')", null)
+            db.update("customers", ContentValues().apply { put("is_deleted", 1); put("status", "inactive") }, "customer_code IN ('CUS-001','CUS-002','CUS-003','CUS-004')", null)
+            db.update("suppliers", ContentValues().apply { put("is_deleted", 1); put("status", "inactive") }, "supplier_code IN ('SUP-001','SUP-002','SUP-003')", null)
+        }
+        if (oldVersion < 4) {
+            addColumnIfMissing(db, "customers", "is_blocked", "INTEGER NOT NULL DEFAULT 0")
+            addColumnIfMissing(db, "services", "telecom_company_id", "INTEGER NOT NULL DEFAULT 0")
+            addColumnIfMissing(db, "suppliers", "institution_type", "TEXT NOT NULL DEFAULT 'bank'")
+            addColumnIfMissing(db, "suppliers", "bank_account_name", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, "suppliers", "trusted_sender", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, "suppliers", "ussd_result_phone", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, "suppliers", "balance_query_sms", "TEXT NOT NULL DEFAULT ''")
+            createTelecomCompaniesTable(db)
+        }
+        Log.d(TAG, "Upgrading database from $oldVersion to $newVersion")
+    }
+
+    private fun addColumnIfMissing(db: SQLiteDatabase, table: String, column: String, definition: String) {
+        val exists = db.rawQuery("PRAGMA table_info($table)", null).use { cursor ->
+            val nameColumn = cursor.getColumnIndex("name")
+            nameColumn >= 0 && generateSequence { if (cursor.moveToNext()) cursor.getString(nameColumn) else null }.any { it == column }
+        }
+        if (!exists) db.execSQL("ALTER TABLE $table ADD COLUMN $column $definition")
     }
 
     override fun onConfigure(db: SQLiteDatabase) {
@@ -132,6 +155,7 @@ class DatabaseHelper private constructor(context: Context) :
     private fun createAllTables(db: SQLiteDatabase) {
         createCustomersTable(db)
         createServicesTable(db)
+        createTelecomCompaniesTable(db)
         createSuppliersTable(db)
         createTransfersTable(db)
         createActivationsTable(db)
@@ -144,43 +168,7 @@ class DatabaseHelper private constructor(context: Context) :
         createSmsOtpVerificationsTable(db)
         createSystemSettingsTable(db)
         createAuditLogTable(db)
-        createTelecomProvidersTable(db)
-        createPaymentAccountsTable(db)
         createIndexes(db)
-    }
-
-    private fun createTelecomProvidersTable(db: SQLiteDatabase) {
-        db.execSQL("""
-            CREATE TABLE IF NOT EXISTS telecom_providers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                sender_number TEXT NOT NULL UNIQUE,
-                prefixes TEXT NOT NULL DEFAULT '',
-                status TEXT NOT NULL DEFAULT 'active',
-                notes TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                is_deleted INTEGER NOT NULL DEFAULT 0
-            )
-        """)
-    }
-
-    private fun createPaymentAccountsTable(db: SQLiteDatabase) {
-        db.execSQL("""
-            CREATE TABLE IF NOT EXISTS payment_accounts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                account_type TEXT NOT NULL DEFAULT 'bank',
-                account_number TEXT NOT NULL,
-                sender_number TEXT,
-                status TEXT NOT NULL DEFAULT 'active',
-                notes TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                is_deleted INTEGER NOT NULL DEFAULT 0,
-                UNIQUE(account_type, account_number)
-            )
-        """)
     }
 
     // ==================== 2.1 العملاء ====================
@@ -205,6 +193,7 @@ class DatabaseHelper private constructor(context: Context) :
                 notes TEXT,
                 details TEXT,
                 status VARCHAR(20) DEFAULT 'active',          -- active, inactive, blocked
+                is_blocked INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 is_deleted INTEGER DEFAULT 0,
@@ -234,13 +223,23 @@ class DatabaseHelper private constructor(context: Context) :
                 status VARCHAR(20) DEFAULT 'active',          -- active, inactive
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                is_deleted INTEGER DEFAULT 0
+                is_deleted INTEGER DEFAULT 0,
+                telecom_company_id INTEGER NOT NULL DEFAULT 0
             )
         """)
         Log.d(TAG, "Services table created")
     }
 
-    // ==================== 2.3 الموردين والحوالات ====================
+    private fun createTelecomCompaniesTable(db: SQLiteDatabase) {
+        db.execSQL("""CREATE TABLE IF NOT EXISTS telecom_companies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE,
+            ussd_phone TEXT NOT NULL DEFAULT '', prefix1 TEXT NOT NULL DEFAULT '',
+            prefix2 TEXT NOT NULL DEFAULT '', prefix3 TEXT NOT NULL DEFAULT '', prefix4 TEXT NOT NULL DEFAULT '',
+            balance_phone TEXT NOT NULL DEFAULT '', is_deleted INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
+    }
+
+    // ==================== 2.3 البنوك والحوالات والمحافظ ====================
 
     private fun createSuppliersTable(db: SQLiteDatabase) {
         db.execSQL("""
@@ -254,6 +253,11 @@ class DatabaseHelper private constructor(context: Context) :
                 phone3 VARCHAR(20),
                 our_balance DECIMAL(15,2) DEFAULT 0,           -- رصيدنا لديهم
                 their_balance DECIMAL(15,2) DEFAULT 0,          -- رصيدهم لدينا
+                institution_type TEXT NOT NULL DEFAULT 'bank',
+                bank_account_name TEXT NOT NULL DEFAULT '',
+                trusted_sender TEXT NOT NULL DEFAULT '',
+                ussd_result_phone TEXT NOT NULL DEFAULT '',
+                balance_query_sms TEXT NOT NULL DEFAULT '',
                 status VARCHAR(20) DEFAULT 'active',           -- active, inactive
                 details TEXT,
                 notes TEXT,
@@ -489,11 +493,14 @@ class DatabaseHelper private constructor(context: Context) :
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_customers_phone1 ON customers(phone1)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_customers_phone2 ON customers(phone2)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(status)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_customers_deleted_name ON customers(is_deleted, full_name)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_customers_credit ON customers(is_deleted, allow_credit, current_balance)")
         
         // الخدمات
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_services_code ON services(service_code)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_services_type ON services(service_type)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_services_status ON services(status)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_services_deleted_status_type ON services(is_deleted, status, service_type)")
         
         // الموردين
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_suppliers_phone1 ON suppliers(phone1)")
@@ -510,6 +517,10 @@ class DatabaseHelper private constructor(context: Context) :
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_activations_service ON activations(service_id)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_activations_status ON activations(status)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_activations_phone ON activations(phone_number)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_activations_service_status ON activations(service_id, status)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_activations_customer_status ON activations(customer_id, status)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_metrics_timestamp_id ON sms_metrics(timestamp DESC, id DESC)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_metrics_event_timestamp ON sms_metrics(event_type, timestamp DESC)")
     }
 
     // ================================================================
@@ -517,51 +528,8 @@ class DatabaseHelper private constructor(context: Context) :
     // ================================================================
 
     private fun insertInitialData(db: SQLiteDatabase) {
-        // ==================== الخدمات الافتراضية ====================
-        val services = listOf(
-            arrayOf("TOPUP-500", "شحن 500 ريال", "500 ريال", "topup", "500.00", "*101*500#", "MTN"),
-            arrayOf("TOPUP-1000", "شحن 1000 ريال", "1000 ريال", "topup", "1000.00", "*101*1000#", "MTN"),
-            arrayOf("TOPUP-2000", "شحن 2000 ريال", "2000 ريال", "topup", "2000.00", "*101*2000#", "MTN"),
-            arrayOf("INTERNET-1GB", "باقة إنترنت 1 جيجا", "1 جيجا إنترنت", "internet", "1500.00", "*105*1#", "MTN"),
-            arrayOf("INTERNET-5GB", "باقة إنترنت 5 جيجا", "5 جيجا إنترنت", "internet", "5000.00", "*105*5#", "MTN"),
-            arrayOf("INTERNET-10GB", "باقة إنترنت 10 جيجا", "10 جيجا إنترنت", "internet", "8000.00", "*105*10#", "MTN"),
-            arrayOf("SMS-100", "باقة رسائل 100", "100 رسالة", "sms", "500.00", "*106*100#", "MTN"),
-            arrayOf("SMS-500", "باقة رسائل 500", "500 رسالة", "sms", "2000.00", "*106*500#", "MTN"),
-            arrayOf("CALLS-100", "باقة مكالمات 100 دقيقة", "100 دقيقة", "call", "1500.00", "*107*100#", "MTN"),
-            arrayOf("CALLS-300", "باقة مكالمات 300 دقيقة", "300 دقيقة", "call", "4000.00", "*107*300#", "MTN"),
-            arrayOf("PACKAGE-GOLD", "باقة الذهبية", "باقة شاملة", "package", "10000.00", "*108*GOLD#", "MTN"),
-            arrayOf("PACKAGE-SILVER", "باقة الفضية", "باقة شاملة", "package", "5000.00", "*108*SILVER#", "MTN")
-        )
-
-        for (s in services) {
-            db.execSQL("""
-                INSERT OR IGNORE INTO services 
-                (service_code, service_name, service_name_ar, service_type, price, activation_command, provider, is_active)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-            """, s)
-        }
-
-        // ==================== عملاء افتراضيون ====================
-        db.execSQL("""
-            INSERT OR IGNORE INTO customers 
-            (customer_code, full_name, phone1, balance_deposit, allow_credit, credit_limit, current_balance, status)
-            VALUES 
-            ('CUS-001', 'أحمد محمد', '777000001', 10000.00, 1, 5000.00, 0.00, 'active'),
-            ('CUS-002', 'خالد علي', '777000002', 5000.00, 1, 3000.00, 0.00, 'active'),
-            ('CUS-003', 'سالم عبدالله', '777000003', 2000.00, 0, 0.00, 0.00, 'active'),
-            ('CUS-004', 'محمد عبدالرحمن', '777000004', 0.00, 1, 2000.00, 1500.00, 'active')
-        """)
-
-        // ==================== موردون افتراضيون ====================
-        db.execSQL("""
-            INSERT OR IGNORE INTO suppliers 
-            (supplier_code, name, phone1, our_balance, their_balance, status)
-            VALUES 
-            ('SUP-001', 'شركة الحوالات اليمنية', '771000001', 50000.00, 0.00, 'active'),
-            ('SUP-002', 'الحوالات السريعة', '772000002', 30000.00, 0.00, 'active'),
-            ('SUP-003', 'تحويلات الخير', '773000003', 20000.00, 0.00, 'active')
-        """)
-
+        // لا تُزرع خدمات أو عملاء أو موردون افتراضيون. تُنشأ هذه السجلات من واجهة الإدارة فقط؛
+        // إبقاء القاعدة فارغة يمنع إرسال خدمات وهمية أو ربط البنك بمورد تجريبي.
         // ==================== إعدادات النظام ====================
         val settings = listOf(
             arrayOf("sms_enabled", "1", "boolean", "sms", "تفعيل نظام SMS"),
@@ -603,7 +571,7 @@ class DatabaseHelper private constructor(context: Context) :
         return try {
             val db = readableDatabase
             db.rawQuery(
-                "SELECT * FROM customers WHERE phone1 = ? OR phone2 = ? OR phone3 = ? AND is_deleted = 0 LIMIT 1",
+                "SELECT * FROM customers WHERE (phone1 = ? OR phone2 = ? OR phone3 = ?) AND status = 'active' AND is_deleted = 0 LIMIT 1",
                 arrayOf(normalizedPhone, normalizedPhone, normalizedPhone)
             ).use { cursor ->
                 if (cursor.moveToFirst()) cursorToJsonObject(cursor) else null
@@ -673,6 +641,7 @@ class DatabaseHelper private constructor(context: Context) :
                 put("notes", data.optString("notes", ""))
                 put("details", data.optString("details", ""))
                 put("status", data.optString("status", "active"))
+                put("is_blocked", if (data.optBoolean("is_blocked", false)) 1 else 0)
                 put("created_at", getCurrentDateTime())
                 put("updated_at", getCurrentDateTime())
             }
@@ -692,20 +661,22 @@ class DatabaseHelper private constructor(context: Context) :
         return try {
             val db = writableDatabase
             val values = ContentValues().apply {
-                data.optString("full_name")?.let { put("full_name", it) }
-                data.optString("full_name_ar")?.let { put("full_name_ar", it) }
-                data.optString("phone1")?.let { put("phone1", normalizePhone(it)) }
-                data.optString("phone2")?.let { put("phone2", normalizePhone(it)) }
-                data.optString("phone3")?.let { put("phone3", normalizePhone(it)) }
-                data.optDouble("balance_deposit")?.let { put("balance_deposit", it) }
+                if (data.has("full_name") && !data.isNull("full_name")) put("full_name", data.optString("full_name"))
+                if (data.has("full_name_ar") && !data.isNull("full_name_ar")) put("full_name_ar", data.optString("full_name_ar"))
+                if (data.has("phone1") && !data.isNull("phone1")) put("phone1", normalizePhone(data.optString("phone1")))
+                if (data.has("phone2") && !data.isNull("phone2")) put("phone2", normalizePhone(data.optString("phone2")))
+                if (data.has("phone3") && !data.isNull("phone3")) put("phone3", normalizePhone(data.optString("phone3")))
+                if (data.has("balance_deposit") && !data.isNull("balance_deposit")) put("balance_deposit", data.optDouble("balance_deposit"))
                 if (data.has("allow_credit")) put("allow_credit", if (data.optBoolean("allow_credit")) 1 else 0)
-                data.optDouble("credit_limit")?.let { put("credit_limit", it) }
-                data.optDouble("current_balance")?.let { put("current_balance", it) }
-                data.optString("notes")?.let { put("notes", it) }
-                data.optString("details")?.let { put("details", it) }
-                data.optString("status")?.let { put("status", it) }
+                if (data.has("credit_limit") && !data.isNull("credit_limit")) put("credit_limit", data.optDouble("credit_limit"))
+                if (data.has("current_balance") && !data.isNull("current_balance")) put("current_balance", data.optDouble("current_balance"))
+                if (data.has("notes") && !data.isNull("notes")) put("notes", data.optString("notes"))
+                if (data.has("details") && !data.isNull("details")) put("details", data.optString("details"))
+                if (data.has("status") && !data.isNull("status")) put("status", data.optString("status"))
+                if (data.has("is_blocked")) put("is_blocked", if (data.optBoolean("is_blocked")) 1 else 0)
                 put("updated_at", getCurrentDateTime())
             }
+            if (values.size() <= 1) return 0
             val rows = db.update("customers", values, "id = ?", arrayOf(id.toString()))
             if (rows > 0) logAudit("update_customer", "customers", id.toLong(), "تحديث عميل: $id")
             rows
@@ -906,8 +877,6 @@ class DatabaseHelper private constructor(context: Context) :
         dbLock.lock()
         return try {
             val db = writableDatabase
-            val template = data.optString("activation_command", "")
-            if (!SmsActivationRules.validateUssdTemplate(template)) return -1L
             val values = ContentValues().apply {
                 put("service_code", data.optString("service_code", "SRV-${System.currentTimeMillis()}"))
                 put("service_name", data.optString("service_name", ""))
@@ -917,6 +886,7 @@ class DatabaseHelper private constructor(context: Context) :
                 put("activation_code", data.optString("activation_code", ""))
                 put("activation_command", data.optString("activation_command", ""))
                 put("provider", data.optString("provider", ""))
+                put("telecom_company_id", data.optInt("telecom_company_id", 0))
                 put("description", data.optString("description", ""))
                 put("notes", data.optString("notes", ""))
                 put("is_active", if (data.optBoolean("is_active", true)) 1 else 0)
@@ -939,23 +909,23 @@ class DatabaseHelper private constructor(context: Context) :
         dbLock.lock()
         return try {
             val db = writableDatabase
-            if (data.has("activation_command") &&
-                !SmsActivationRules.validateUssdTemplate(data.optString("activation_command"))) return -1
             val values = ContentValues().apply {
-                data.optString("service_code")?.let { put("service_code", it) }
-                data.optString("service_name")?.let { put("service_name", it) }
-                data.optString("service_name_ar")?.let { put("service_name_ar", it) }
-                data.optString("service_type")?.let { put("service_type", it) }
-                data.optDouble("price")?.let { put("price", it) }
-                data.optString("activation_code")?.let { put("activation_code", it) }
-                data.optString("activation_command")?.let { put("activation_command", it) }
-                data.optString("provider")?.let { put("provider", it) }
-                data.optString("description")?.let { put("description", it) }
-                data.optString("notes")?.let { put("notes", it) }
+                if (data.has("service_code") && !data.isNull("service_code")) put("service_code", data.optString("service_code"))
+                if (data.has("service_name") && !data.isNull("service_name")) put("service_name", data.optString("service_name"))
+                if (data.has("service_name_ar") && !data.isNull("service_name_ar")) put("service_name_ar", data.optString("service_name_ar"))
+                if (data.has("service_type") && !data.isNull("service_type")) put("service_type", data.optString("service_type"))
+                if (data.has("price") && !data.isNull("price")) put("price", data.optDouble("price"))
+                if (data.has("activation_code") && !data.isNull("activation_code")) put("activation_code", data.optString("activation_code"))
+                if (data.has("activation_command") && !data.isNull("activation_command")) put("activation_command", data.optString("activation_command"))
+                if (data.has("provider") && !data.isNull("provider")) put("provider", data.optString("provider"))
+                if (data.has("telecom_company_id")) put("telecom_company_id", data.optInt("telecom_company_id"))
+                if (data.has("description") && !data.isNull("description")) put("description", data.optString("description"))
+                if (data.has("notes") && !data.isNull("notes")) put("notes", data.optString("notes"))
                 if (data.has("is_active")) put("is_active", if (data.optBoolean("is_active")) 1 else 0)
-                data.optString("status")?.let { put("status", it) }
+                if (data.has("status") && !data.isNull("status")) put("status", data.optString("status"))
                 put("updated_at", getCurrentDateTime())
             }
+            if (values.size() <= 1) return 0
             val rows = db.update("services", values, "id = ?", arrayOf(id.toString()))
             if (rows > 0) logAudit("update_service", "services", id.toLong(), "تحديث خدمة: $id")
             rows
@@ -1001,6 +971,15 @@ class DatabaseHelper private constructor(context: Context) :
         }
     }
 
+    fun setActivationCommand(serviceCode: String, command: String): Boolean {
+        if (serviceCode.isBlank() || command.length > 200) return false
+        dbLock.lock()
+        return try {
+            val values = ContentValues().apply { put("activation_command", command.trim()); put("updated_at", getCurrentDateTime()) }
+            writableDatabase.update("services", values, "service_code = ? AND is_deleted = 0", arrayOf(serviceCode)) > 0
+        } finally { dbLock.unlock() }
+    }
+
     /**
      * الحصول على كود التفعيل للخدمة
      */
@@ -1017,61 +996,6 @@ class DatabaseHelper private constructor(context: Context) :
         } finally {
             dbLock.unlock()
         }
-    }
-
-    fun getTelecomProviders(status: String? = "active"): JSONArray {
-        dbLock.lock()
-        return try {
-            val where = if (status == null) "is_deleted = 0" else "is_deleted = 0 AND status = ?"
-            readableDatabase.rawQuery("SELECT * FROM telecom_providers WHERE $where ORDER BY name",
-                if (status == null) null else arrayOf(status)).use { cursor -> cursorToJsonArray(cursor) }
-        } finally { dbLock.unlock() }
-    }
-
-    fun saveTelecomProvider(data: JSONObject): Long {
-        dbLock.lock()
-        return try {
-            val values = ContentValues().apply {
-                put("name", data.optString("name").trim())
-                put("sender_number", SmsActivationRules.normalizePhone(data.optString("sender_number")))
-                put("prefixes", data.optString("prefixes", ""))
-                put("status", data.optString("status", "active"))
-                put("notes", data.optString("notes", ""))
-                put("updated_at", getCurrentDateTime())
-            }
-            val db = writableDatabase
-            val id = data.optInt("id", 0)
-            if (id > 0) db.update("telecom_providers", values, "id = ?", arrayOf(id.toString())).toLong()
-            else db.insertOrThrow("telecom_providers", null, values)
-        } finally { dbLock.unlock() }
-    }
-
-    fun getPaymentAccounts(status: String? = "active"): JSONArray {
-        dbLock.lock()
-        return try {
-            val where = if (status == null) "is_deleted = 0" else "is_deleted = 0 AND status = ?"
-            readableDatabase.rawQuery("SELECT * FROM payment_accounts WHERE $where ORDER BY name",
-                if (status == null) null else arrayOf(status)).use { cursor -> cursorToJsonArray(cursor) }
-        } finally { dbLock.unlock() }
-    }
-
-    fun savePaymentAccount(data: JSONObject): Long {
-        dbLock.lock()
-        return try {
-            val values = ContentValues().apply {
-                put("name", data.optString("name").trim())
-                put("account_type", data.optString("account_type", "bank"))
-                put("account_number", data.optString("account_number").trim())
-                put("sender_number", SmsActivationRules.normalizePhone(data.optString("sender_number")))
-                put("status", data.optString("status", "active"))
-                put("notes", data.optString("notes", ""))
-                put("updated_at", getCurrentDateTime())
-            }
-            val db = writableDatabase
-            val id = data.optInt("id", 0)
-            if (id > 0) db.update("payment_accounts", values, "id = ?", arrayOf(id.toString())).toLong()
-            else db.insertOrThrow("payment_accounts", null, values)
-        } finally { dbLock.unlock() }
     }
 
     /**
@@ -1109,7 +1033,7 @@ class DatabaseHelper private constructor(context: Context) :
         return try {
             val db = readableDatabase
             db.rawQuery(
-                "SELECT * FROM suppliers WHERE phone1 = ? OR phone2 = ? OR phone3 = ? AND is_deleted = 0 LIMIT 1",
+                "SELECT * FROM suppliers WHERE (phone1 = ? OR phone2 = ? OR phone3 = ?) AND is_deleted = 0 LIMIT 1",
                 arrayOf(normalizedPhone, normalizedPhone, normalizedPhone)
             ).use { cursor ->
                 if (cursor.moveToFirst()) cursorToJsonObject(cursor) else null
@@ -1173,6 +1097,11 @@ class DatabaseHelper private constructor(context: Context) :
                 put("phone3", normalizePhone(data.optString("phone3", "")))
                 put("our_balance", data.optDouble("our_balance", 0.0))
                 put("their_balance", data.optDouble("their_balance", 0.0))
+                put("institution_type", data.optString("institution_type", "bank"))
+                put("bank_account_name", data.optString("bank_account_name", ""))
+                put("trusted_sender", normalizePhone(data.optString("trusted_sender", "")))
+                put("ussd_result_phone", data.optString("ussd_result_phone", ""))
+                put("balance_query_sms", data.optString("balance_query_sms", ""))
                 put("status", data.optString("status", "active"))
                 put("details", data.optString("details", ""))
                 put("notes", data.optString("notes", ""))
@@ -1195,18 +1124,24 @@ class DatabaseHelper private constructor(context: Context) :
         return try {
             val db = writableDatabase
             val values = ContentValues().apply {
-                data.optString("name")?.let { put("name", it) }
-                data.optString("name_ar")?.let { put("name_ar", it) }
-                data.optString("phone1")?.let { put("phone1", normalizePhone(it)) }
-                data.optString("phone2")?.let { put("phone2", normalizePhone(it)) }
-                data.optString("phone3")?.let { put("phone3", normalizePhone(it)) }
-                data.optDouble("our_balance")?.let { put("our_balance", it) }
-                data.optDouble("their_balance")?.let { put("their_balance", it) }
-                data.optString("status")?.let { put("status", it) }
-                data.optString("details")?.let { put("details", it) }
-                data.optString("notes")?.let { put("notes", it) }
+                if (data.has("name") && !data.isNull("name")) put("name", data.optString("name"))
+                if (data.has("name_ar") && !data.isNull("name_ar")) put("name_ar", data.optString("name_ar"))
+                if (data.has("phone1") && !data.isNull("phone1")) put("phone1", normalizePhone(data.optString("phone1")))
+                if (data.has("phone2") && !data.isNull("phone2")) put("phone2", normalizePhone(data.optString("phone2")))
+                if (data.has("phone3") && !data.isNull("phone3")) put("phone3", normalizePhone(data.optString("phone3")))
+                if (data.has("our_balance") && !data.isNull("our_balance")) put("our_balance", data.optDouble("our_balance"))
+                if (data.has("their_balance") && !data.isNull("their_balance")) put("their_balance", data.optDouble("their_balance"))
+                if (data.has("institution_type")) put("institution_type", data.optString("institution_type"))
+                if (data.has("bank_account_name")) put("bank_account_name", data.optString("bank_account_name"))
+                if (data.has("trusted_sender")) put("trusted_sender", normalizePhone(data.optString("trusted_sender")))
+                if (data.has("ussd_result_phone")) put("ussd_result_phone", data.optString("ussd_result_phone"))
+                if (data.has("balance_query_sms")) put("balance_query_sms", data.optString("balance_query_sms"))
+                if (data.has("status") && !data.isNull("status")) put("status", data.optString("status"))
+                if (data.has("details") && !data.isNull("details")) put("details", data.optString("details"))
+                if (data.has("notes") && !data.isNull("notes")) put("notes", data.optString("notes"))
                 put("updated_at", getCurrentDateTime())
             }
+            if (values.size() <= 1) return 0
             val rows = db.update("suppliers", values, "id = ?", arrayOf(id.toString()))
             if (rows > 0) logAudit("update_supplier", "suppliers", id.toLong(), "تحديث مورد: $id")
             rows
@@ -1230,6 +1165,22 @@ class DatabaseHelper private constructor(context: Context) :
             val rows = db.update("suppliers", values, "id = ?", arrayOf(supplierId.toString()))
             if (rows > 0) logAudit("balance_update", "suppliers", supplierId.toLong(), "تحديث رصيد: $amount")
             rows > 0
+        } finally {
+            dbLock.unlock()
+        }
+    }
+
+    /** حذف منطقي لمورد */
+    fun deleteSupplier(id: Int): Int {
+        dbLock.lock()
+        return try {
+            val values = ContentValues().apply {
+                put("is_deleted", 1)
+                put("updated_at", getCurrentDateTime())
+            }
+            val rows = writableDatabase.update("suppliers", values, "id = ? AND is_deleted = 0", arrayOf(id.toString()))
+            if (rows > 0) logAudit("delete_supplier", "suppliers", id.toLong(), "حذف مورد: $id")
+            rows
         } finally {
             dbLock.unlock()
         }
@@ -1857,6 +1808,49 @@ class DatabaseHelper private constructor(context: Context) :
         }
     }
 
+    /** Writes every row from a whitelisted collection as comma-separated JSON objects. */
+    fun writeExportRows(collection: String, writer: Writer): Int {
+        val sql = when (collection) {
+            "services" -> "SELECT * FROM services WHERE is_deleted=0 ORDER BY id"
+            "customers" -> "SELECT * FROM customers WHERE is_deleted=0 ORDER BY id"
+            "sms" -> "SELECT * FROM sms_metrics ORDER BY timestamp DESC, id DESC"
+            else -> throw IllegalArgumentException("نوع التصدير غير مدعوم")
+        }
+        dbLock.lock()
+        return try {
+            var written = 0
+            readableDatabase.rawQuery(sql, null).use { cursor ->
+                while (cursor.moveToNext()) {
+                    if (written > 0) writer.append(',')
+                    val row = JSONObject()
+                    for (column in 0 until cursor.columnCount) {
+                        val value: Any = if (cursor.isNull(column)) JSONObject.NULL else when (cursor.getType(column)) {
+                            Cursor.FIELD_TYPE_INTEGER -> cursor.getLong(column)
+                            Cursor.FIELD_TYPE_FLOAT -> cursor.getDouble(column)
+                            Cursor.FIELD_TYPE_BLOB -> Base64.encodeToString(cursor.getBlob(column), Base64.NO_WRAP)
+                            else -> cursor.getString(column)
+                        }
+                        row.put(cursor.getColumnName(column), value)
+                    }
+                    writer.append(row.toString())
+                    written++
+                }
+            }
+            written
+        } finally {
+            dbLock.unlock()
+        }
+    }
+
+    fun deleteSmsMetric(id: Int): Int {
+        dbLock.lock()
+        return try {
+            writableDatabase.delete("sms_metrics", "id = ?", arrayOf(id.toString()))
+        } finally {
+            dbLock.unlock()
+        }
+    }
+
     // ==================== 9.7 OTP ====================
 
     fun createSmsOtp(phone: String, otpCode: String, expirySeconds: Int = 300): Boolean {
@@ -1993,6 +1987,79 @@ class DatabaseHelper private constructor(context: Context) :
         return stats
     }
 
+    /** Purpose-built report queries: summary buttons aggregate in SQLite and detail views are bounded. */
+    fun getOperationalReport(type: String): JSONArray {
+        val sql = when (type) {
+            "services_summary" -> """
+                SELECT service_type, COUNT(*) AS service_count,
+                       SUM(CASE WHEN status='active' AND is_active=1 THEN 1 ELSE 0 END) AS active_count,
+                       ROUND(AVG(price), 2) AS average_price
+                FROM services WHERE is_deleted=0 GROUP BY service_type ORDER BY service_type
+            """.trimIndent()
+            "services_by_status" -> """
+                SELECT status, COUNT(*) AS service_count, ROUND(AVG(price), 2) AS average_price
+                FROM services WHERE is_deleted=0 GROUP BY status ORDER BY status
+            """.trimIndent()
+            "services_pricing" -> """
+                SELECT service_type, COUNT(*) AS service_count, MIN(price) AS minimum_price,
+                       ROUND(AVG(price), 2) AS average_price, MAX(price) AS maximum_price
+                FROM services WHERE is_deleted=0 GROUP BY service_type ORDER BY service_type
+            """.trimIndent()
+            "full_services" -> """
+                SELECT s.id, s.service_code, s.service_name, s.service_type, s.price, s.is_active, s.status,
+                       (SELECT COUNT(*) FROM activations a WHERE a.service_id=s.id AND a.status='success') AS activation_count,
+                       (SELECT COALESCE(SUM(a.amount), 0) FROM activations a WHERE a.service_id=s.id AND a.status='success') AS total_revenue
+                FROM services s WHERE s.is_deleted=0 ORDER BY s.service_name LIMIT 2000
+            """.trimIndent()
+            "customers_list", "full_customers" -> """
+                SELECT id, customer_code, full_name, phone1, balance_deposit, current_balance,
+                       allow_credit, credit_limit, status, total_purchases, total_payments
+                FROM customers WHERE is_deleted=0 ORDER BY full_name LIMIT 2000
+            """.trimIndent()
+            "customers_balance" -> """
+                SELECT CASE WHEN current_balance > 0 THEN 'مدين' WHEN current_balance < 0 THEN 'دائن' ELSE 'متوازن' END AS balance_status,
+                       COUNT(*) AS customer_count, ROUND(SUM(current_balance), 2) AS total_balance,
+                       ROUND(AVG(current_balance), 2) AS average_balance
+                FROM customers WHERE is_deleted=0 GROUP BY balance_status ORDER BY balance_status
+            """.trimIndent()
+            "customers_credit" -> """
+                SELECT full_name, phone1, allow_credit, credit_limit, current_balance,
+                       ROUND(MAX(credit_limit-current_balance, 0), 2) AS available_credit,
+                       CASE WHEN allow_credit=1 THEN 'مسموح' ELSE 'غير مسموح' END AS credit_status
+                FROM customers WHERE is_deleted=0 ORDER BY allow_credit DESC, current_balance DESC LIMIT 2000
+            """.trimIndent()
+            "sms_summary" -> """
+                SELECT COUNT(*) AS total_messages, COUNT(DISTINCT phone) AS unique_senders,
+                       SUM(CASE WHEN lower(event_type) LIKE '%fail%' OR lower(event_type) LIKE '%reject%' THEN 1 ELSE 0 END) AS failed_messages,
+                       MAX(timestamp) AS latest_timestamp
+                FROM sms_metrics
+            """.trimIndent()
+            "sms_by_status" -> """
+                SELECT CASE
+                         WHEN lower(event_type) LIKE '%fail%' OR lower(event_type) LIKE '%reject%' OR lower(event_type) LIKE '%error%' THEN 'فاشلة'
+                         WHEN lower(event_type) LIKE '%process%' OR lower(event_type) LIKE '%success%' OR lower(event_type) LIKE '%verified%' OR lower(event_type) LIKE '%sent%' THEN 'معالجة'
+                         ELSE 'مستلمة/أخرى'
+                       END AS status,
+                       COUNT(*) AS message_count, COUNT(DISTINCT phone) AS unique_senders
+                FROM sms_metrics GROUP BY status ORDER BY status
+            """.trimIndent()
+            "sms_analysis" -> """
+                SELECT event_type, COUNT(*) AS message_count, COUNT(DISTINCT phone) AS unique_senders,
+                       ROUND(AVG(length(COALESCE(details, ''))), 1) AS average_content_length,
+                       MAX(timestamp) AS latest_timestamp
+                FROM sms_metrics GROUP BY event_type ORDER BY message_count DESC, event_type LIMIT 200
+            """.trimIndent()
+            "full_sms" -> "SELECT * FROM sms_metrics ORDER BY timestamp DESC, id DESC LIMIT 1000"
+            else -> throw IllegalArgumentException("نوع التقرير غير معروف")
+        }
+        dbLock.lock()
+        return try {
+            readableDatabase.rawQuery(sql, null).use { cursor -> cursorToJsonArray(cursor) }
+        } finally {
+            dbLock.unlock()
+        }
+    }
+
     /**
      * تقرير العملاء
      */
@@ -2072,6 +2139,28 @@ class DatabaseHelper private constructor(context: Context) :
     // ================================================================
     // 11. دوال الإعدادات
     // ================================================================
+
+    fun getTelecomCompanyById(id: Int): JSONObject? = readableDatabase.rawQuery("SELECT * FROM telecom_companies WHERE id=? AND is_deleted=0", arrayOf(id.toString())).use { if (it.moveToFirst()) cursorToJsonObject(it) else null }
+
+    fun getFinancialInstitutionBySender(phone: String): JSONObject? {
+        val normalized = normalizePhone(phone)
+        return readableDatabase.rawQuery("SELECT * FROM suppliers WHERE is_deleted=0 AND status='active' AND (trusted_sender=? OR phone1=?) LIMIT 1", arrayOf(normalized, normalized)).use { if (it.moveToFirst()) cursorToJsonObject(it) else null }
+    }
+
+    fun getTelecomCompanies(): JSONArray = readableDatabase.rawQuery("SELECT * FROM telecom_companies WHERE is_deleted=0 ORDER BY name", null).use { cursorToJsonArray(it) }
+
+    fun saveTelecomCompany(data: JSONObject): Long {
+        val id = data.optInt("id", 0)
+        val values = ContentValues().apply {
+            put("name", data.optString("name").trim()); put("ussd_phone", data.optString("ussd_phone").trim())
+            for (i in 1..4) put("prefix$i", data.optString("prefix$i").trim())
+            put("balance_phone", data.optString("balance_phone").trim()); put("updated_at", getCurrentDateTime())
+        }
+        return if (id > 0) { writableDatabase.update("telecom_companies", values, "id=? AND is_deleted=0", arrayOf(id.toString())).toLong().let { if (it > 0) id.toLong() else -1L } }
+        else writableDatabase.insert("telecom_companies", null, values)
+    }
+
+    fun deleteTelecomCompany(id: Int): Int = writableDatabase.update("telecom_companies", ContentValues().apply { put("is_deleted", 1) }, "id=?", arrayOf(id.toString()))
 
     fun getSetting(key: String): String {
         dbLock.lock()
@@ -2186,7 +2275,7 @@ class DatabaseHelper private constructor(context: Context) :
 
     fun getDatabaseSize(): Long {
         return try {
-            val dbFile = appContext.getDatabasePath(DB_NAME)
+            val dbFile = context.getDatabasePath(DB_NAME)
             dbFile.length()
         } catch (e: Exception) {
             0L
@@ -2197,26 +2286,7 @@ class DatabaseHelper private constructor(context: Context) :
     // 14. دوال مساعدة
     // ================================================================
 
-    private fun normalizePhone(phone: String): String {
-        if (phone.isBlank()) return ""
-        return phone.trim()
-            .replace(" ", "")
-            .replace("-", "")
-            .replace("(", "")
-            .replace(")", "")
-            .replace("+", "")
-            .let {
-                when {
-                    it.startsWith("00966") -> it.substring(5)
-                    it.startsWith("966") -> it.substring(3)
-                    it.startsWith("00") -> it.substring(2)
-                    else -> it
-                }
-            }
-            .let {
-                if (it.length == 9 && !it.startsWith("966")) "966$it" else it
-            }
-    }
+    private fun normalizePhone(phone: String): String = SmsTextAnalysis.normalizePhone(phone)
 
     private fun cursorToJsonArray(cursor: Cursor): JSONArray {
         val arr = JSONArray()
@@ -2254,24 +2324,6 @@ class DatabaseHelper private constructor(context: Context) :
 
     fun logSms(phone: String, message: String, type: String, status: String): Long {
         return insertSmsMetric("SMS_${type.uppercase()}_${status.uppercase()}", phone, message.take(200))
-    }
-
-    fun getSmsLogs(): JSONArray {
-        dbLock.lock()
-        return try {
-            readableDatabase.rawQuery(
-                "SELECT * FROM sms_metrics WHERE event_type LIKE 'SMS_%' ORDER BY timestamp DESC LIMIT 500",
-                null
-            ).use { cursor -> cursorToJsonArray(cursor) }
-        } finally { dbLock.unlock() }
-    }
-
-    fun exportAllData(): JSONObject = JSONObject().apply {
-        put("customers", getCustomers())
-        put("services", getServices())
-        put("suppliers", getSuppliers())
-        put("sms_logs", getSmsLogs())
-        put("exported_at", getCurrentDateTime())
     }
 
     // دوال لتوافق مع SmsCustomerResolver

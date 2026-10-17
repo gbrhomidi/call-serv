@@ -1,8 +1,6 @@
 package com.aistudio.dieselstationsms.kxmpzq
 
 import android.app.Application
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
@@ -10,10 +8,14 @@ import android.os.StatFs
 import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import java.io.File
 import java.io.FileWriter
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 
 /**
@@ -41,6 +43,7 @@ class MyApplication : Application() {
         private const val MAX_CRASH_FILES = 10
         private const val MIN_FREE_SPACE_MB = 5
         private const val DATE_FORMAT = "yyyy-MM-dd HH:mm:ss"
+        private const val BACKUP_WORK_NAME = "auto_backup_work"
         private val crashLock = ReentrantLock()
 
         // إعدادات التخزين المشفر
@@ -128,9 +131,6 @@ class MyApplication : Application() {
         // تهيئة معالج الأعطال العالمي
         setupCrashHandler()
 
-        // تهيئة قنوات الإشعارات
-        createNotificationChannels()
-
         // تهيئة EncryptedSharedPreferences مسبقاً (لتجنب التأخير لاحقاً)
         try {
             getEncryptedPreferences()
@@ -139,29 +139,26 @@ class MyApplication : Application() {
             Log.e(TAG, "Failed to initialize encrypted preferences", e)
         }
 
+        scheduleAutomaticBackup()
+
         Log.d(TAG, "Application initialized successfully")
     }
 
-    /**
-     * إنشاء قنوات الإشعارات المطلوبة
-     */
-    private fun createNotificationChannels() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            try {
-                val channel = NotificationChannel(
-                    "station_sms_channel",
-                    "SMS Service",
-                    NotificationManager.IMPORTANCE_LOW
-                ).apply {
-                    description = "قناة إشعارات خدمة الرسائل النصية"
-                    setShowBadge(false)
-                }
-                val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                manager.createNotificationChannel(channel)
-                Log.d(TAG, "Notification channel created")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to create notification channel", e)
-            }
+    /** Schedule the lightweight periodic backup without a permanent foreground service. */
+    private fun scheduleAutomaticBackup() {
+        try {
+            val request = PeriodicWorkRequestBuilder<BackupWorker>(
+                24, TimeUnit.HOURS,
+                1, TimeUnit.HOURS
+            ).build()
+            WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                BACKUP_WORK_NAME,
+                ExistingPeriodicWorkPolicy.KEEP,
+                request
+            )
+            Log.d(TAG, "Periodic automatic backup scheduled with WorkManager")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to schedule periodic automatic backup", e)
         }
     }
 

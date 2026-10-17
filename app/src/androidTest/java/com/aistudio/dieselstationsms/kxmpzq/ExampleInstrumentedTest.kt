@@ -32,7 +32,7 @@ class ExampleInstrumentedTest {
         val appContext = ApplicationProvider.getApplicationContext<MyApplication>()
 
         // التحقق من اسم الحزمة
-        assertEquals("com.aistudio.dieselstationsms.kxmpzq", appContext.packageName)
+        assertEquals("com.aistudio.telecomactivation", appContext.packageName)
 
         // التحقق من أن السياق ليس null
         assertNotNull(appContext)

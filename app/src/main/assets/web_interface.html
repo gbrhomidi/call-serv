@@ -1112,8 +1112,12 @@
                     <span>العملاء</span>
                 </div>
                 <div class="quick-btn" onclick="showScreen('suppliers')">
-                    <span class="icon">🏭</span>
-                    <span>الموردين</span>
+                    <span class="icon">🏦</span>
+                    <span>البنوك والحوالات والمحافظ</span>
+                </div>
+                <div class="quick-btn" onclick="showScreen('telecoms')">
+                    <span class="icon">📡</span>
+                    <span>شركات الاتصالات</span>
                 </div>
                 <div class="quick-btn" onclick="showScreen('sms')">
                     <span class="icon">📨</span>
@@ -1195,10 +1199,10 @@
                 <div class="table-container">
                     <table class="data-table">
                         <thead>
-                            <tr><th>#</th><th>الاسم</th><th>الهاتف1</th><th>الهاتف2</th><th>الهاتف3</th><th>رصيد المودع</th><th>يسمح بالأجل</th><th>الحد المسموح</th><th>الرصيد الحالي</th><th>الإجراءات</th></tr>
+                            <tr><th>#</th><th>الاسم</th><th>الهاتف1</th><th>الهاتف2</th><th>الهاتف3</th><th>رصيد المودع</th><th>يسمح بالأجل</th><th>الحد المسموح</th><th>الرصيد الحالي</th><th>محظور</th><th>الإجراءات</th></tr>
                         </thead>
                         <tbody id="customersTable">
-                            <tr><td colspan="10" class="text-center text-muted">جاري التحميل...</td></tr>
+                            <tr><td colspan="11" class="text-center text-muted">جاري التحميل...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1218,7 +1222,7 @@
         ============================================================ -->
         <div class="screen" id="screen-suppliers">
             <div class="card">
-                <div class="card-title"><span class="icon">🏭</span> إدارة الموردين والحوالات</div>
+                <div class="card-title"><span class="icon">🏭</span> البنوك والحوالات والمحافظ الإلكترونية</div>
                 <div class="flex flex-wrap gap-1 mb-1">
                     <button class="btn btn-primary" onclick="openSupplierModal()">➕ إضافة</button>
                     <button class="btn btn-success" onclick="exportSuppliers()">📤 تصدير</button>
@@ -1229,21 +1233,33 @@
                 <div class="table-container">
                     <table class="data-table">
                         <thead>
-                            <tr><th>#</th><th>الاسم</th><th>الهاتف1</th><th>الهاتف2</th><th>الهاتف3</th><th>رصيدنا لديهم</th><th>رصيدهم لدينا</th><th>الحالة</th><th>الإجراءات</th></tr>
+                            <tr><th>#</th><th>النوع والاسم</th><th>اسم الحساب</th><th>مرسل البنك</th><th>هاتف USSD</th><th>الرصيد</th><th>الحالة</th><th>الإجراءات</th></tr>
                         </thead>
                         <tbody id="suppliersTable">
-                            <tr><td colspan="9" class="text-center text-muted">جاري التحميل...</td></tr>
+                            <tr><td colspan="8" class="text-center text-muted">جاري التحميل...</td></tr>
                         </tbody>
                     </table>
                 </div>
                 <!-- تقارير الموردين -->
                 <div class="mt-2" style="border-top:var(--border-width) var(--border-style) var(--border-color);padding-top:12px;">
                     <div class="flex flex-wrap gap-1">
-                        <button class="btn btn-sm btn-outline" onclick="generateReport('suppliers_list')">📊 قائمة الموردين</button>
+                        <button class="btn btn-sm btn-outline" onclick="generateReport('suppliers_list')">📊 قائمة الجهات المالية</button>
                         <button class="btn btn-sm btn-outline" onclick="generateReport('suppliers_balance')">📊 تحليل الأرصدة</button>
                         <button class="btn btn-sm btn-outline" onclick="generateReport('suppliers_transfers')">📊 تقرير الحوالات</button>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <div class="screen" id="screen-telecoms">
+            <div class="card">
+                <div class="card-title"><span class="icon">📡</span> شركات الاتصالات</div>
+                <div class="flex flex-wrap gap-1 mb-1">
+                    <button class="btn btn-primary" onclick="openTelecomModal()">➕ إضافة شركة</button>
+                    <button class="btn btn-success" onclick="exportJsonFile('telecom-companies.json', currentTelecoms)">📤 تصدير</button>
+                    <input type="text" class="form-control" placeholder="بحث..." oninput="filterTable('telecomsTable', this.value)">
+                </div>
+                <div class="table-container"><table class="data-table"><thead><tr><th>#</th><th>الشركة</th><th>رقم USSD</th><th>البادئات</th><th>رقم رصيد الشركة</th><th>الإجراءات</th></tr></thead><tbody id="telecomsTable"><tr><td colspan="6" class="text-center text-muted">جاري التحميل...</td></tr></tbody></table></div>
             </div>
         </div>
 
@@ -1332,9 +1348,47 @@
                         <input type="url" class="form-control" id="logoUrl" placeholder="https://example.com/logo.png">
                     </div>
                     <div class="form-group">
-                        <label>هاتف الدعم</label>
-                        <input type="tel" class="form-control" id="supportPhone" placeholder="+967 777 000 000">
+                        <label>هاتف الدعم 1</label><input type="tel" class="form-control" id="supportPhone" placeholder="+967 777 000 000">
+                    </div><div class="form-group"><label>هاتف الدعم 2</label><input type="tel" class="form-control" id="supportPhone2" placeholder="+967 777 000 001">
                     </div>
+                    <div class="form-group"><label><input type="checkbox" id="smsEnabled" checked> تفعيل رسائل SMS</label></div>
+                    <div class="form-group"><label><input type="checkbox" id="appActive" checked> التطبيق نشط</label></div>
+                    <hr>
+                    <h3>إعدادات تفعيل الخدمات عبر SMS</h3>
+                    <div class="form-group">
+                        <label>اسم البنك كما يظهر في رسالة البنك</label>
+                        <input type="text" class="form-control" id="systemBankName" placeholder="مثال: الشرعي">
+                    </div>
+                    <div class="form-group">
+                        <label>اسم حساب النظام لدى البنك</label>
+                        <input type="text" class="form-control" id="systemBankAccountName" placeholder="اسم المستفيد">
+                    </div>
+                    <div class="form-group">
+                        <label>رقم مرسل رسائل البنك الموثوق</label>
+                        <input type="tel" class="form-control" id="systemBankSenderPhone" placeholder="رقم مرسل SMS للبنك">
+                    </div>
+                    <div class="form-group">
+                        <label>رقم هاتف المورد الذي يرسل نتيجة USSD ورصيد المورد</label>
+                        <input type="tel" class="form-control" id="activationProviderPhone" placeholder="رقم المورد الموثوق">
+                    </div>
+                    <div class="form-group">
+                        <label>رصيد المورد الحالي قبل أي محاولة تفعيل</label>
+                        <input type="number" min="0" step="0.01" class="form-control" id="activationProviderBalance" placeholder="مطلوب للسماح بإعادة محاولة آمنة">
+                    </div>
+                    <div class="form-group">
+                        <label>نص SMS للاستعلام عن رصيد المورد</label>
+                        <textarea class="form-control" id="supplierBalanceQuery" rows="2" placeholder="رسالة المورد للاستعلام عن رصيد النظام"></textarea>
+                    </div>
+                    <p class="text-muted">تُقبل الحوالة آلياً عند تطابق رقم مرسل البنك واسم البنك واسم العميل والمبلغ مع طلب واحد منتظر. لا يُستخدم رصيد حساب البنك كشرط مطابقة. ولن يُعاد أمر USSD إلا مرة واحدة بعد رد موثوق يثبت أن رصيد المورد لم يتغير.</p>
+                    <div class="form-group">
+                        <label>الخدمة المراد ضبط أمرها الكامل</label>
+                        <select class="form-control" id="smsServiceSelect" onchange="loadSelectedSmsCommand()"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>أمر USSD الكامل (اكتب phone مكان رقم العميل، مثال: 300#*(phone)*130*)</label>
+                        <textarea class="form-control" id="fullActivationCommand" rows="2" dir="ltr" placeholder="300#*(phone)*130*"></textarea>
+                    </div>
+                    <button type="button" class="btn btn-secondary mt-1" onclick="saveSelectedSmsCommand()">حفظ أمر الخدمة</button>
                     <div class="form-group">
                         <label>الحد الأدنى للتنبيه (لتر)</label>
                         <input type="number" class="form-control" id="thresholdInput" value="1000">
@@ -1482,6 +1536,25 @@
                         <input type="text" class="form-control" id="serviceCode" required placeholder="BAL001">
                     </div>
                     <div class="form-group">
+                        <label>نوع الخدمة</label>
+                        <select class="form-control" id="serviceType">
+                            <option value="topup">شحن</option>
+                            <option value="internet">إنترنت</option>
+                            <option value="sms">رسائل</option>
+                            <option value="call">مكالمات</option>
+                            <option value="package">باقة</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>شركة الاتصالات</label>
+                        <select class="form-control" id="serviceTelecomCompany"><option value="0">— اختر شركة اتصالات —</option></select>
+                    </div>
+                    <div class="form-group">
+                        <label>قالب أمر USSD *</label>
+                        <input type="text" class="form-control" id="serviceActivationCommand" required placeholder="*123*(phone)#">
+                        <small class="text-muted">استخدم (phone) مكان رقم هاتف العميل؛ لا يُرسل القالب قبل التحقق من الدفع.</small>
+                    </div>
+                    <div class="form-group">
                         <label>الحالة</label>
                         <select class="form-control" id="serviceStatus">
                             <option value="active">مفعلة</option>
@@ -1543,6 +1616,7 @@
                         <label>الرصيد الحالي</label>
                         <input type="number" class="form-control" id="customerBalance" value="0">
                     </div>
+                    <div class="form-group"><label><input type="checkbox" id="customerBlocked"> محظور — تجاهل رسائل SMS من هذا العميل دون رد</label></div>
                     <div class="form-group">
                         <label>ملاحظات</label>
                         <textarea class="form-control" id="customerNotes" rows="2"></textarea>
@@ -1557,36 +1631,20 @@
     <div class="modal-overlay" id="supplierModal">
         <div class="modal">
             <div class="modal-header">
-                <h2 class="modal-title" id="supplierModalTitle">➕ إضافة مورد</h2>
+                <h2 class="modal-title" id="supplierModalTitle">➕ إضافة جهة مالية</h2>
                 <button class="modal-close" onclick="closeModal('supplierModal')">✕</button>
             </div>
             <div class="modal-body">
                 <form id="supplierForm" onsubmit="saveSupplier(event)">
                     <input type="hidden" id="supplierEditId" value="0">
-                    <div class="form-group">
-                        <label>الاسم *</label>
-                        <input type="text" class="form-control" id="supplierName" required placeholder="شركة الحوالات">
-                    </div>
-                    <div class="form-group">
-                        <label>الهاتف 1 *</label>
-                        <input type="tel" class="form-control" id="supplierPhone1" required placeholder="777000001">
-                    </div>
-                    <div class="form-group">
-                        <label>الهاتف 2</label>
-                        <input type="tel" class="form-control" id="supplierPhone2" placeholder="777000002">
-                    </div>
-                    <div class="form-group">
-                        <label>الهاتف 3</label>
-                        <input type="tel" class="form-control" id="supplierPhone3" placeholder="777000003">
-                    </div>
-                    <div class="form-group">
-                        <label>رصيدنا لديهم</label>
-                        <input type="number" class="form-control" id="supplierOurBalance" value="0">
-                    </div>
-                    <div class="form-group">
-                        <label>رصيدهم لدينا</label>
-                        <input type="number" class="form-control" id="supplierTheirBalance" value="0">
-                    </div>
+                    <div class="form-group"><label>نوع الجهة</label><select class="form-control" id="supplierType"><option value="bank">بنك</option><option value="remittance">شركة حوالات</option><option value="wallet">محفظة إلكترونية</option></select></div>
+                    <div class="form-group"><label>اسم البنك/الجهة كما يظهر في رسالة البنك *</label><input type="text" class="form-control" id="supplierName" required placeholder="اسم الجهة في SMS"></div>
+                    <div class="form-group"><label>اسم حساب النظام لدى الجهة</label><input type="text" class="form-control" id="supplierAccountName"></div>
+                    <div class="form-group"><label>رقم مرسل رسائل البنك الموثوق *</label><input type="tel" class="form-control" id="supplierTrustedSender" required></div>
+                    <div class="form-group"><label>رقم هاتف شركة الاتصالات لنتيجة USSD ورصيد التطبيق</label><input type="tel" class="form-control" id="supplierUssdPhone"></div>
+                    <div class="form-group"><label>رصيد التطبيق الحالي قبل أي محاولة تفعيل</label><input type="number" step="0.01" class="form-control" id="supplierOurBalance" value="0"></div>
+                    <div class="form-group"><label>نص SMS للاستعلام عن رصيد التطبيق</label><textarea class="form-control" id="institutionBalanceQuery" rows="2"></textarea></div>
+
                     <div class="form-group">
                         <label>الحالة</label>
                         <select class="form-control" id="supplierStatus">
@@ -1603,6 +1661,8 @@
             </div>
         </div>
     </div>
+
+    <div class="modal-overlay" id="telecomModal"><div class="modal"><div class="modal-header"><h2 class="modal-title">شركة اتصالات</h2><button class="modal-close" onclick="closeModal('telecomModal')">✕</button></div><div class="modal-body"><form onsubmit="saveTelecom(event)"><input type="hidden" id="telecomEditId" value="0"><div class="form-group"><label>اسم شركة الاتصالات *</label><input class="form-control" id="telecomName" required></div><div class="form-group"><label>الرقم الذي يرسل إليه أمر USSD</label><input class="form-control" id="telecomUssdPhone" type="tel"></div><div class="form-group"><label>بادئة الهاتف 1</label><input class="form-control" id="telecomPrefix1"></div><div class="form-group"><label>بادئة الهاتف 2</label><input class="form-control" id="telecomPrefix2"></div><div class="form-group"><label>بادئة الهاتف 3</label><input class="form-control" id="telecomPrefix3"></div><div class="form-group"><label>بادئة الهاتف 4</label><input class="form-control" id="telecomPrefix4"></div><div class="form-group"><label>رقم الشركة المرسل لنتيجة SMS/USSD ورصيد التطبيق</label><input class="form-control" id="telecomBalancePhone" type="tel"></div><button type="submit" class="btn btn-primary">💾 حفظ</button></form></div></div></div>
 
     <!-- SMS Detail Modal -->
     <div class="modal-overlay" id="smsDetailModal">
@@ -1640,211 +1700,34 @@
     JAVASCRIPT – التطبيق الكامل مع بيانات وهمية متقدمة
     ============================================================ -->
     <script>
+        let currentServices = [];
+        let currentCustomers = [];
+        let currentSuppliers = [];
+        let currentSms = [];
+        let currentTelecoms = [];
+
         // ============================================================
-        //  API HELPER – يتواصل مع Kotlin عبر AndroidInterface أو يستخدم بيانات وهمية
+        //  API HELPER – يتواصل حصراً مع قاعدة البيانات الحقيقية داخل Android
         // ============================================================
         async function apiCall(action, params = {}) {
-            // محاولة استخدام AndroidInterface
-            if (typeof window.AndroidInterface !== 'undefined' && window.AndroidInterface) {
-                return new Promise((resolve, reject) => {
-                    try {
-                        const jsonParams = JSON.stringify(params || {});
-                        const result = window.AndroidInterface.execute(action, jsonParams);
-                        try {
-                            const parsed = JSON.parse(result);
-                            resolve(parsed);
-                        } catch (e) {
-                            resolve({ success: true, data: result });
-                        }
-                    } catch (e) {
-                        reject({ success: false, error: e.message || 'فشل الاتصال' });
-                    }
-                });
+            if (!window.AndroidInterface || typeof window.AndroidInterface.execute !== 'function') {
+                return { success: false, error: 'تعذر الاتصال بقاعدة بيانات التطبيق. أغلق التطبيق وافتحه مجدداً.' };
             }
-
-            // Fallback: بيانات وهمية متقدمة (للاختبار دون اتصال)
-            console.warn('AndroidInterface غير متاح، استخدام بيانات وهمية');
-            return mockApiCall(action, params);
+            try {
+                const raw = window.AndroidInterface.execute(action, JSON.stringify(params || {}));
+                const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                if (!parsed || typeof parsed.success !== 'boolean') {
+                    throw new Error('استجابة غير صالحة من قاعدة البيانات');
+                }
+                return parsed;
+            } catch (e) {
+                console.error('Android API failed:', action, e);
+                return { success: false, error: e?.message || 'تعذر تنفيذ العملية' };
+            }
         }
 
         // ============================================================
-        //  MOCK DATA – بيانات وهمية شاملة
-        // ============================================================
-        let mockIdCounter = 100;
-
-        const mockServices = [
-            { id: 1, name: 'شحن رصيد', price: 100, code: 'BAL001', status: 'active', details: 'شحن رصيد اتصالات' },
-            { id: 2, name: 'باقة إنترنت 10GB', price: 50, code: 'INT010', status: 'active', details: 'باقة إنترنت 10 جيجابايت' },
-            { id: 3, name: 'باقة رسائل 500', price: 25, code: 'SMS500', status: 'inactive', details: '500 رسالة نصية' },
-            { id: 4, name: 'باقة إنترنت 20GB', price: 80, code: 'INT020', status: 'active', details: 'باقة إنترنت 20 جيجابايت' },
-            { id: 5, name: 'شحن دولي', price: 200, code: 'INTL001', status: 'inactive', details: 'شحن رصيد دولي' }
-        ];
-
-        const mockCustomers = [
-            { id: 1, name: 'أحمد محمد', phone1: '777000001', phone2: '777000002', phone3: '', deposit: 1500,
-                allowCredit: true, creditLimit: 5000, balance: 1200, notes: 'عميل مميز' },
-            { id: 2, name: 'سارة علي', phone1: '777000003', phone2: '', phone3: '777000004', deposit: 2000,
-                allowCredit: false, creditLimit: 0, balance: -500, notes: '' },
-            { id: 3, name: 'خالد حسن', phone1: '777000005', phone2: '777000006', phone3: '777000007', deposit: 800,
-                allowCredit: true, creditLimit: 3000, balance: 2500, notes: '' },
-            { id: 4, name: 'نورة سعيد', phone1: '777000008', phone2: '', phone3: '', deposit: 3000, allowCredit: true,
-                creditLimit: 10000, balance: 500, notes: 'عميل تجاري' }
-        ];
-
-        const mockSuppliers = [
-            { id: 1, name: 'شركة الحوالات الأولى', phone1: '777111111', phone2: '777111112', phone3: '',
-                ourBalance: 10000, theirBalance: 2000, status: 'active', notes: '' },
-            { id: 2, name: 'مؤسسة النقل السريع', phone1: '777222222', phone2: '', phone3: '777222223',
-                ourBalance: 5000, theirBalance: 3000, status: 'active', notes: '' },
-            { id: 3, name: 'شركة الاتصالات اليمنية', phone1: '777333333', phone2: '777333334', phone3: '777333335',
-                ourBalance: 0, theirBalance: 1500, status: 'inactive', notes: '' }
-        ];
-
-        const mockSms = [
-            { id: 1, sender: '777000001', text: 'اريد شحن رصيد 100', time: '2026-07-31 10:15', status: 'processed' },
-            { id: 2, sender: '777000002', text: 'باقة انترنت 10 جيجا', time: '2026-07-31 09:30', status: 'pending' },
-            { id: 3, sender: '777000003', text: 'كم رصيدي؟', time: '2026-07-31 08:45', status: 'processed' },
-            { id: 4, sender: '777000004', text: 'اريد شحن دولي', time: '2026-07-30 17:20', status: 'failed' },
-            { id: 5, sender: '777000005', text: 'طلب باقة رسائل 500', time: '2026-07-30 14:00', status: 'received' },
-            { id: 6, sender: '777000001', text: 'شكراً', time: '2026-07-30 10:10', status: 'processed' }
-        ];
-
-        const mockNotifications = [
-            { id: 1, title: '🔔 تنبيه', message: 'تم استلام رسالة جديدة من 777000001', time: 'منذ 5 دقائق' },
-            { id: 2, title: '⚠️ تحذير', message: 'العميل أحمد محمد تجاوز الحد الائتماني', time: 'منذ ساعة' },
-            { id: 3, title: '📊 تقرير', message: 'تم توليد تقرير المبيعات اليومي', time: 'منذ 3 ساعات' }
-        ];
-
-        // ============================================================
-        //  MOCK API – محاكاة جميع العمليات
-        // ============================================================
-        function mockApiCall(action, params) {
-            return new Promise((resolve) => {
-                setTimeout(() => {
-                    switch (action) {
-                        case 'get_dashboard':
-                            resolve({
-                                success: true,
-                                data: [{
-                                    total_customers: mockCustomers.length,
-                                    total_services: mockServices.length,
-                                    sms_today: mockSms.filter(s => s.time.startsWith(new Date()
-                                        .toISOString().slice(0, 10))).length,
-                                    total_due: 15000
-                                }],
-                                ai_insight: '📈 توقعات اليوم: من المتوقع استقبال 8-12 رسالة، مع 3 طلبات شحن.'
-                            });
-                            break;
-                        case 'get_daily_sms':
-                            resolve({
-                                success: true,
-                                data: [
-                                    { date: '2026-07-25', count: 5 },
-                                    { date: '2026-07-26', count: 8 },
-                                    { date: '2026-07-27', count: 3 },
-                                    { date: '2026-07-28', count: 10 },
-                                    { date: '2026-07-29', count: 6 },
-                                    { date: '2026-07-30', count: 12 },
-                                    { date: '2026-07-31', count: 7 }
-                                ]
-                            });
-                            break;
-                        case 'get_services':
-                            resolve({ success: true, data: mockServices });
-                            break;
-                        case 'save_service':
-                            if (params.id && params.id > 0) {
-                                const idx = mockServices.findIndex(s => s.id == params.id);
-                                if (idx >= 0) mockServices[idx] = { ...mockServices[idx], ...params };
-                            } else {
-                                params.id = ++mockIdCounter;
-                                mockServices.push(params);
-                            }
-                            resolve({ success: true, message: 'تم حفظ الخدمة', data: params });
-                            break;
-                        case 'delete_service':
-                            const idxS = mockServices.findIndex(s => s.id == params.id);
-                            if (idxS >= 0) mockServices.splice(idxS, 1);
-                            resolve({ success: true, message: 'تم الحذف' });
-                            break;
-                        case 'get_customers':
-                            resolve({ success: true, data: mockCustomers });
-                            break;
-                        case 'save_customer':
-                            if (params.id && params.id > 0) {
-                                const idx = mockCustomers.findIndex(c => c.id == params.id);
-                                if (idx >= 0) mockCustomers[idx] = { ...mockCustomers[idx], ...params };
-                            } else {
-                                params.id = ++mockIdCounter;
-                                mockCustomers.push(params);
-                            }
-                            resolve({ success: true, message: 'تم حفظ العميل', data: params });
-                            break;
-                        case 'delete_customer':
-                            const idxC = mockCustomers.findIndex(c => c.id == params.id);
-                            if (idxC >= 0) mockCustomers.splice(idxC, 1);
-                            resolve({ success: true, message: 'تم الحذف' });
-                            break;
-                        case 'get_suppliers':
-                            resolve({ success: true, data: mockSuppliers });
-                            break;
-                        case 'save_supplier':
-                            if (params.id && params.id > 0) {
-                                const idx = mockSuppliers.findIndex(s => s.id == params.id);
-                                if (idx >= 0) mockSuppliers[idx] = { ...mockSuppliers[idx], ...params };
-                            } else {
-                                params.id = ++mockIdCounter;
-                                mockSuppliers.push(params);
-                            }
-                            resolve({ success: true, message: 'تم حفظ المورد', data: params });
-                            break;
-                        case 'delete_supplier':
-                            const idxSup = mockSuppliers.findIndex(s => s.id == params.id);
-                            if (idxSup >= 0) mockSuppliers.splice(idxSup, 1);
-                            resolve({ success: true, message: 'تم الحذف' });
-                            break;
-                        case 'get_sms':
-                            resolve({ success: true, data: mockSms });
-                            break;
-                        case 'delete_sms':
-                            const idxSms = mockSms.findIndex(s => s.id == params.id);
-                            if (idxSms >= 0) mockSms.splice(idxSms, 1);
-                            resolve({ success: true, message: 'تم الحذف' });
-                            break;
-                        case 'get_notifications':
-                            resolve({ success: true, data: mockNotifications });
-                            break;
-                        case 'generate_report':
-                            // تقارير وهمية
-                            let reportData = [];
-                            switch (params.report_type) {
-                                case 'services_summary':
-                                    reportData = mockServices.map(s => ({
-                                        name: s.name,
-                                        price: s.price,
-                                        status: s.status
-                                    }));
-                                    break;
-                                case 'customers_list':
-                                    reportData = mockCustomers.map(c => ({
-                                        name: c.name,
-                                        phone: c.phone1,
-                                        balance: c.balance
-                                    }));
-                                    break;
-                                default:
-                                    reportData = { message: 'تقرير نموذجي', items: mockServices.slice(0, 3) };
-                            }
-                            resolve({ success: true, data: reportData });
-                            break;
-                        default:
-                            resolve({ success: false, error: 'إجراء غير معروف: ' + action });
-                    }
-                }, 300);
-            });
-        }
-
-        // ============================================================
+        // لا توجد بيانات fallback وهمية؛ خارج Android تُعرض حالة الجسر فقط.
         //  CORE FUNCTIONS
         // ============================================================
 
@@ -1883,6 +1766,12 @@
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
             const navBtn = document.querySelector(`.nav-item[data-screen="${screenId}"]`);
             if (navBtn) navBtn.classList.add('active');
+            if (screenId === 'services') loadServices();
+            else if (screenId === 'customers') loadCustomers();
+            else if (screenId === 'suppliers') loadSuppliers();
+            else if (screenId === 'telecoms') loadTelecoms();
+            else if (screenId === 'sms') loadSms();
+            else if (screenId === 'notifications') loadNotifications();
         }
 
         // Filter table
@@ -1919,6 +1808,65 @@
             try { return JSON.parse(localStorage.getItem('business_settings') || '{}'); } catch { return {}; }
         }
 
+        const persistentSmsSettings = {
+            systemBankName: 'system_bank_name',
+            systemBankAccountName: 'system_bank_account_name',
+            systemBankSenderPhone: 'system_bank_sender_phone',
+            activationProviderPhone: 'activation_provider_phone',
+            activationProviderBalance: 'activation_provider_balance',
+            supplierBalanceQuery: 'supplier_balance_query_sms',
+            smsEnabled: 'sms_enabled',
+            appActive: 'app_active'
+        };
+
+        let smsServiceCatalog = [];
+        function applyPersistentSmsSettings() {
+            if (!window.AndroidInterface || !window.AndroidInterface.getPersistentSetting) return;
+            Object.entries(persistentSmsSettings).forEach(([elementId, key]) => {
+                const element = document.getElementById(elementId);
+                if (element) {
+                    const value = window.AndroidInterface.getPersistentSetting(key) || '';
+                    if (element.type === 'checkbox') element.checked = value !== 'false';
+                    else element.value = value;
+                }
+            });
+            loadSmsServiceCatalog();
+        }
+
+        function loadSmsServiceCatalog() {
+            if (!window.AndroidInterface || !window.AndroidInterface.getSmsServiceCatalog) return;
+            try {
+                smsServiceCatalog = JSON.parse(window.AndroidInterface.getSmsServiceCatalog() || '[]');
+                const select = document.getElementById('smsServiceSelect');
+                if (!select) return;
+                const previous = select.value;
+                select.innerHTML = smsServiceCatalog.map(s => `<option value="${String(s.service_code || '').replace(/"/g, '&quot;')}">${String(s.service_name_ar || s.service_name || s.service_code)} — ${String(s.service_code || '')}</option>`).join('');
+                if (previous) select.value = previous;
+                loadSelectedSmsCommand();
+            } catch (e) { console.warn('تعذر تحميل خدمات SMS', e); }
+        }
+
+        function loadSelectedSmsCommand() {
+            const select = document.getElementById('smsServiceSelect');
+            const input = document.getElementById('fullActivationCommand');
+            const item = smsServiceCatalog.find(s => s.service_code === select?.value);
+            if (input) input.value = item?.activation_command || '';
+        }
+
+        function saveSelectedSmsCommand() {
+            const select = document.getElementById('smsServiceSelect');
+            const command = document.getElementById('fullActivationCommand')?.value.trim() || '';
+            if (!window.AndroidInterface || !window.AndroidInterface.setServiceActivationTemplate) {
+                showToast('حفظ أوامر الخدمات يتطلب تشغيل التطبيق على Android', 'warning'); return;
+            }
+            if (!select?.value || !/\(\s*phone\s*\)|\{\{?\s*phone\s*}?\}|%phone%|\bphone\b/i.test(command)) {
+                showToast('يجب أن يتضمن الأمر الكامل موضع phone لاستبداله برقم العميل', 'warning'); return;
+            }
+            if (window.AndroidInterface.setServiceActivationTemplate(select.value, command)) {
+                showToast('تم حفظ أمر التفعيل الكامل', 'success'); loadSmsServiceCatalog();
+            } else showToast('تعذر حفظ الأمر؛ تحقق من صيغته', 'error');
+        }
+
         function applySettings() {
             const settings = getBusinessSettings();
             const name = settings.businessName || 'نظام الخدمات';
@@ -1927,18 +1875,32 @@
             document.getElementById('businessName').value = name;
             document.getElementById('logoUrl').value = settings.logoUrl || '';
             document.getElementById('supportPhone').value = settings.supportPhone || '';
+            document.getElementById('supportPhone2').value = settings.supportPhone2 || '';
+            if (window.AndroidInterface?.getPersistentSetting) {
+                document.getElementById('smsEnabled').checked = window.AndroidInterface.getPersistentSetting('sms_enabled') !== 'false';
+                document.getElementById('appActive').checked = window.AndroidInterface.getPersistentSetting('app_active') !== 'false';
+            }
+            applyPersistentSmsSettings();
         }
 
-        function saveSettings(e) {
+        async function saveSettings(e) {
             e.preventDefault();
             const settings = {
                 businessName: document.getElementById('businessName').value.trim() || 'نظام الخدمات',
                 logoUrl: document.getElementById('logoUrl').value.trim(),
-                supportPhone: document.getElementById('supportPhone').value.trim()
+                supportPhone: document.getElementById('supportPhone').value.trim(),
+                supportPhone2: document.getElementById('supportPhone2').value.trim()
             };
             localStorage.setItem('business_settings', JSON.stringify(settings));
+            let persistentSaveFailed = false;
+            if (window.AndroidInterface && window.AndroidInterface.setPersistentSetting) {
+                for (const [elementId, key] of Object.entries(persistentSmsSettings)) {
+                    const element = document.getElementById(elementId);
+                    if (element && !window.AndroidInterface.setPersistentSetting(key, element.type === 'checkbox' ? String(element.checked) : element.value.trim())) persistentSaveFailed = true;
+                }
+            }
             applySettings();
-            showToast('تم حفظ الإعدادات', 'success');
+            showToast(persistentSaveFailed ? 'تعذر حفظ بعض إعدادات SMS' : 'تم حفظ الإعدادات', persistentSaveFailed ? 'warning' : 'success');
         }
 
         async function saveTelecomProvider(e) {
@@ -2048,6 +2010,7 @@
         }
 
         function renderServices(data) {
+            currentServices = Array.isArray(data) ? data : [];
             const tbody = document.getElementById('servicesTable');
             if (!data || data.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">لا توجد خدمات</td></tr>';
@@ -2074,13 +2037,16 @@
             document.getElementById('serviceName').value = data?.name || '';
             document.getElementById('servicePrice').value = data?.price || '';
             document.getElementById('serviceCode').value = data?.code || '';
+            document.getElementById('serviceType').value = data?.service_type || 'topup';
+            loadTelecomOptions().then(() => { document.getElementById('serviceTelecomCompany').value = data?.telecom_company_id || 0; });
+            document.getElementById('serviceActivationCommand').value = data?.activation_command || '';
             document.getElementById('serviceStatus').value = data?.status || 'active';
             document.getElementById('serviceDetails').value = data?.details || '';
             document.getElementById('serviceModal').classList.add('active');
         }
 
         function editService(id) {
-            const item = mockServices.find(s => s.id == id);
+            const item = currentServices.find(s => s.id == id);
             if (item) openServiceModal(item);
         }
 
@@ -2109,11 +2075,15 @@
                 name: document.getElementById('serviceName').value.trim(),
                 price: parseFloat(document.getElementById('servicePrice').value) || 0,
                 code: document.getElementById('serviceCode').value.trim(),
+                service_type: document.getElementById('serviceType').value,
+                provider: currentTelecoms.find(t => t.id == document.getElementById('serviceTelecomCompany').value)?.name || '',
+                telecom_company_id: parseInt(document.getElementById('serviceTelecomCompany').value) || 0,
+                activation_command: document.getElementById('serviceActivationCommand').value.trim(),
                 status: document.getElementById('serviceStatus').value,
                 details: document.getElementById('serviceDetails').value.trim()
             };
-            if (!data.name || !data.code) {
-                showToast('الاسم وكود التفعيل مطلوبان', 'warning');
+            if (!data.name || !data.code || !data.activation_command) {
+                showToast('الاسم وكود الخدمة وقالب أمر USSD مطلوبون', 'warning');
                 return;
             }
             showLoading(true);
@@ -2133,9 +2103,34 @@
             }
         }
 
-        function exportServices() {
-            showToast('جاري تصدير الخدمات...', 'success');
+        function exportJsonFile(filename, data) {
+            const json = JSON.stringify(data, null, 2);
+            if (window.AndroidInterface && typeof window.AndroidInterface.exportJsonFile === 'function') {
+                const opened = window.AndroidInterface.exportJsonFile(filename, json);
+                showToast(opened ? 'اختر تطبيقاً لحفظ الملف أو مشاركته' : 'تعذر إنشاء ملف التصدير', opened ? 'success' : 'error');
+                return;
+            }
+            const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            showToast('تم تنزيل الملف', 'success');
         }
+
+        function exportCollection(collection, filename, fallbackRows) {
+            if (window.AndroidInterface && typeof window.AndroidInterface.exportCollection === 'function') {
+                const created = window.AndroidInterface.exportCollection(collection);
+                showToast(created
+                    ? 'تم إنشاء ملف التصدير؛ اختر تطبيقاً لحفظه أو مشاركته'
+                    : 'تعذر إنشاء ملف التصدير، تحقق من مساحة التخزين ثم أعد المحاولة', created ? 'success' : 'error');
+                return;
+            }
+            exportJsonFile(filename, fallbackRows);
+        }
+
+        function exportServices() { exportCollection('services', 'services.json', currentServices); }
 
         // ============================================================
         //  CUSTOMERS CRUD
@@ -2152,9 +2147,10 @@
         }
 
         function renderCustomers(data) {
+            currentCustomers = Array.isArray(data) ? data : [];
             const tbody = document.getElementById('customersTable');
             if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">لا يوجد عملاء</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">لا يوجد عملاء</td></tr>';
                 return;
             }
             tbody.innerHTML = data.map((c, i) => `
@@ -2168,6 +2164,7 @@
                     <td><span class="badge ${c.allowCredit ? 'badge-success' : 'badge-danger'}">${c.allowCredit ? 'نعم' : 'لا'}</span></td>
                     <td>${c.creditLimit} ريال</td>
                     <td style="color:${c.balance < 0 ? 'var(--error)' : 'var(--success)'}">${c.balance} ريال</td>
+                    <td><input type="checkbox" ${c.is_blocked ? 'checked' : ''} onchange="toggleCustomerBlocked(${c.id}, this.checked)" aria-label="حظر العميل"></td>
                     <td>
                         <button class="btn btn-sm btn-primary" onclick="editCustomer(${c.id})">✏️</button>
                         <button class="btn btn-sm btn-danger" onclick="deleteCustomer(${c.id})">🗑️</button>
@@ -2188,11 +2185,12 @@
             document.getElementById('customerCreditLimit').value = data?.creditLimit || 0;
             document.getElementById('customerBalance').value = data?.balance || 0;
             document.getElementById('customerNotes').value = data?.notes || '';
+            document.getElementById('customerBlocked').checked = !!data?.is_blocked;
             document.getElementById('customerModal').classList.add('active');
         }
 
         function editCustomer(id) {
-            const item = mockCustomers.find(c => c.id == id);
+            const item = currentCustomers.find(c => c.id == id);
             if (item) openCustomerModal(item);
         }
 
@@ -2226,10 +2224,11 @@
                 allowCredit: parseInt(document.getElementById('customerAllowCredit').value) === 1,
                 creditLimit: parseFloat(document.getElementById('customerCreditLimit').value) || 0,
                 balance: parseFloat(document.getElementById('customerBalance').value) || 0,
-                notes: document.getElementById('customerNotes').value.trim()
+                notes: document.getElementById('customerNotes').value.trim(),
+                is_blocked: document.getElementById('customerBlocked').checked
             };
             if (!data.name || !data.phone1) {
-                showToast('الاسم والهاتف 1 مطلوبان', 'warning');
+                showToast('اسم الجهة ورقم مرسل الرسائل مطلوبان', 'warning');
                 return;
             }
             showLoading(true);
@@ -2249,9 +2248,13 @@
             }
         }
 
-        function exportCustomers() {
-            showToast('جاري تصدير العملاء...', 'success');
+        async function toggleCustomerBlocked(id, is_blocked) {
+            const customer = currentCustomers.find(c => c.id == id); if (!customer) return;
+            const result = await apiCall('save_customer', { id, name: customer.name, phone1: customer.phone1, is_blocked });
+            if (!result.success) { showToast(result.error || 'تعذر تحديث الحظر', 'error'); await loadCustomers(); }
+            else { customer.is_blocked = is_blocked; showToast(is_blocked ? 'تم حظر العميل وتجاهل رسائله دون رد' : 'تم إلغاء حظر العميل', 'success'); }
         }
+        function exportCustomers() { exportCollection('customers', 'customers.json', currentCustomers); }
 
         // ============================================================
         //  SUPPLIERS CRUD
@@ -2268,20 +2271,20 @@
         }
 
         function renderSuppliers(data) {
+            currentSuppliers = Array.isArray(data) ? data : [];
             const tbody = document.getElementById('suppliersTable');
             if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">لا يوجد موردين</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">لا توجد جهات مالية</td></tr>';
                 return;
             }
             tbody.innerHTML = data.map((s, i) => `
                 <tr>
                     <td>${i + 1}</td>
-                    <td><strong>${s.name}</strong></td>
-                    <td>${s.phone1}</td>
-                    <td>${s.phone2 || '—'}</td>
-                    <td>${s.phone3 || '—'}</td>
+                    <td><strong>${s.name}</strong><br><small>${({bank:'بنك',remittance:'حوالات',wallet:'محفظة'}[s.institution_type] || 'جهة')}</small></td>
+                    <td>${s.bank_account_name || '—'}</td>
+                    <td>${s.trusted_sender || '—'}</td>
+                    <td>${s.ussd_result_phone || '—'}</td>
                     <td>${s.ourBalance} ريال</td>
-                    <td>${s.theirBalance} ريال</td>
                     <td><span class="badge ${s.status === 'active' ? 'badge-success' : 'badge-danger'}">${s.status === 'active' ? 'مفعل' : 'غير مفعل'}</span></td>
                     <td>
                         <button class="btn btn-sm btn-primary" onclick="editSupplier(${s.id})">✏️</button>
@@ -2293,20 +2296,21 @@
 
         function openSupplierModal(data) {
             document.getElementById('supplierEditId').value = data?.id || 0;
-            document.getElementById('supplierModalTitle').textContent = data ? '✏️ تعديل مورد' : '➕ إضافة مورد';
+            document.getElementById('supplierModalTitle').textContent = data ? '✏️ تعديل جهة مالية' : '➕ إضافة جهة مالية';
+            document.getElementById('supplierType').value = data?.institution_type || 'bank';
+            document.getElementById('supplierAccountName').value = data?.bank_account_name || '';
+            document.getElementById('supplierTrustedSender').value = data?.trusted_sender || '';
+            document.getElementById('supplierUssdPhone').value = data?.ussd_result_phone || '';
+            document.getElementById('institutionBalanceQuery').value = data?.balance_query_sms || '';
             document.getElementById('supplierName').value = data?.name || '';
-            document.getElementById('supplierPhone1').value = data?.phone1 || '';
-            document.getElementById('supplierPhone2').value = data?.phone2 || '';
-            document.getElementById('supplierPhone3').value = data?.phone3 || '';
             document.getElementById('supplierOurBalance').value = data?.ourBalance || 0;
-            document.getElementById('supplierTheirBalance').value = data?.theirBalance || 0;
             document.getElementById('supplierStatus').value = data?.status || 'active';
             document.getElementById('supplierNotes').value = data?.notes || '';
             document.getElementById('supplierModal').classList.add('active');
         }
 
         function editSupplier(id) {
-            const item = mockSuppliers.find(s => s.id == id);
+            const item = currentSuppliers.find(s => s.id == id);
             if (item) openSupplierModal(item);
         }
 
@@ -2333,16 +2337,18 @@
             const data = {
                 id: parseInt(document.getElementById('supplierEditId').value) || 0,
                 name: document.getElementById('supplierName').value.trim(),
-                phone1: document.getElementById('supplierPhone1').value.trim(),
-                phone2: document.getElementById('supplierPhone2').value.trim(),
-                phone3: document.getElementById('supplierPhone3').value.trim(),
+                phone1: document.getElementById('supplierTrustedSender').value.trim(),
+                institution_type: document.getElementById('supplierType').value,
+                bank_account_name: document.getElementById('supplierAccountName').value.trim(),
+                trusted_sender: document.getElementById('supplierTrustedSender').value.trim(),
+                ussd_result_phone: document.getElementById('supplierUssdPhone').value.trim(),
+                balance_query_sms: document.getElementById('institutionBalanceQuery').value.trim(),
                 ourBalance: parseFloat(document.getElementById('supplierOurBalance').value) || 0,
-                theirBalance: parseFloat(document.getElementById('supplierTheirBalance').value) || 0,
                 status: document.getElementById('supplierStatus').value,
                 notes: document.getElementById('supplierNotes').value.trim()
             };
             if (!data.name || !data.phone1) {
-                showToast('الاسم والهاتف 1 مطلوبان', 'warning');
+                showToast('اسم الجهة ورقم مرسل الرسائل مطلوبان', 'warning');
                 return;
             }
             showLoading(true);
@@ -2362,9 +2368,32 @@
             }
         }
 
-        function exportSuppliers() {
-            showToast('جاري تصدير الموردين...', 'success');
+        function exportSuppliers() { exportJsonFile('suppliers.json', currentSuppliers); }
+
+        async function loadTelecoms() {
+            const result = await apiCall('get_telecom_companies');
+            if (!result.success) return;
+            currentTelecoms = result.data || [];
+            const tbody = document.getElementById('telecomsTable');
+            tbody.innerHTML = currentTelecoms.length ? currentTelecoms.map((t,i) => `<tr><td>${i+1}</td><td>${t.name}</td><td>${t.ussd_phone || '—'}</td><td>${[t.prefix1,t.prefix2,t.prefix3,t.prefix4].filter(Boolean).join('، ') || '—'}</td><td>${t.balance_phone || '—'}</td><td><button class="btn btn-sm btn-primary" onclick="openTelecomModal(${t.id})">✏️</button> <button class="btn btn-sm btn-danger" onclick="deleteTelecom(${t.id})">🗑️</button></td></tr>`).join('') : '<tr><td colspan="6" class="text-center text-muted">لا توجد شركات اتصالات</td></tr>';
         }
+        async function loadTelecomOptions() {
+            const result = await apiCall('get_telecom_companies'); currentTelecoms = result.data || [];
+            const select = document.getElementById('serviceTelecomCompany'); if (!select) return;
+            const selected = select.value; select.innerHTML = '<option value="0">— اختر شركة اتصالات —</option>' + currentTelecoms.map(t => `<option value="${t.id}">${t.name}</option>`).join(''); select.value = selected;
+        }
+        function openTelecomModal(id=0) {
+            const t = currentTelecoms.find(x => x.id == id) || {};
+            document.getElementById('telecomEditId').value = t.id || 0;
+            for (const [id, key] of [['telecomName','name'],['telecomUssdPhone','ussd_phone'],['telecomPrefix1','prefix1'],['telecomPrefix2','prefix2'],['telecomPrefix3','prefix3'],['telecomPrefix4','prefix4'],['telecomBalancePhone','balance_phone']]) document.getElementById(id).value = t[key] || '';
+            document.getElementById('telecomModal').classList.add('active');
+        }
+        async function saveTelecom(e) {
+            e.preventDefault(); const data={id:+document.getElementById('telecomEditId').value,name:document.getElementById('telecomName').value.trim(),ussd_phone:document.getElementById('telecomUssdPhone').value.trim(),balance_phone:document.getElementById('telecomBalancePhone').value.trim()};
+            for(let i=1;i<=4;i++) data['prefix'+i]=document.getElementById('telecomPrefix'+i).value.trim();
+            const result=await apiCall('save_telecom_company',data); if(result.success){closeModal('telecomModal');showToast(result.message,'success');await loadTelecoms();await loadTelecomOptions();}else showToast(result.error||'تعذر الحفظ','error');
+        }
+        async function deleteTelecom(id) { if(!confirm('حذف شركة الاتصالات؟')) return; const r=await apiCall('delete_telecom_company',{id}); if(r.success) await loadTelecoms(); else showToast(r.error||'تعذر الحذف','error'); }
 
         // ============================================================
         //  SMS INBOX
@@ -2381,6 +2410,7 @@
         }
 
         function renderSms(data) {
+            currentSms = Array.isArray(data) ? data : [];
             const tbody = document.getElementById('smsTable');
             if (!data || data.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">لا توجد رسائل</td></tr>';
@@ -2407,7 +2437,7 @@
         }
 
         function viewSms(id) {
-            const sms = mockSms.find(s => s.id == id);
+            const sms = currentSms.find(s => s.id == id);
             if (!sms) return;
             document.getElementById('smsDetailBody').innerHTML = `
                 <div style="margin-bottom:8px;"><strong>المرسل:</strong> ${sms.sender}</div>
@@ -2445,9 +2475,7 @@
             }
         }
 
-        function exportSms() {
-            showToast('جاري تصدير الرسائل...', 'success');
-        }
+        function exportSms() { exportCollection('sms', 'sms_log.json', currentSms); }
 
         // ============================================================
         //  NOTIFICATIONS
@@ -2484,77 +2512,87 @@
         // ============================================================
         let currentReportData = null;
 
+        function renderReportData(data, body) {
+            body.replaceChildren();
+            if (Array.isArray(data)) {
+                const rows = data.filter(row => row && typeof row === 'object');
+                if (rows.length === 0) {
+                    body.textContent = 'لا توجد بيانات لهذا التقرير';
+                    return;
+                }
+                const keys = Object.keys(rows[0]);
+                const container = document.createElement('div');
+                container.className = 'table-container';
+                const table = document.createElement('table');
+                table.className = 'data-table';
+                const thead = document.createElement('thead');
+                const headerRow = document.createElement('tr');
+                keys.forEach(key => {
+                    const cell = document.createElement('th');
+                    cell.textContent = key;
+                    headerRow.appendChild(cell);
+                });
+                thead.appendChild(headerRow);
+                const tbody = document.createElement('tbody');
+                rows.forEach(row => {
+                    const tr = document.createElement('tr');
+                    keys.forEach(key => {
+                        const td = document.createElement('td');
+                        const value = row[key];
+                        td.textContent = value == null ? '' :
+                            (typeof value === 'object' ? JSON.stringify(value) : String(value));
+                        tr.appendChild(td);
+                    });
+                    tbody.appendChild(tr);
+                });
+                table.append(thead, tbody);
+                container.appendChild(table);
+                body.appendChild(container);
+                return;
+            }
+
+            const pre = document.createElement('pre');
+            pre.style.cssText = 'background:var(--bg-color);padding:16px;border-radius:var(--radius-sm);font-size:0.85rem;overflow:auto;white-space:pre-wrap;';
+            pre.textContent = JSON.stringify(data ?? {}, null, 2);
+            body.appendChild(pre);
+        }
+
         async function generateReport(type) {
             showLoading(true);
             try {
                 const result = await apiCall('generate_report', { report_type: type });
-                if (result.success) {
-                    currentReportData = result.data;
-                    document.getElementById('reportModalTitle').textContent = '📊 ' +
-                        (type.replace('_', ' ').toUpperCase());
-                    const body = document.getElementById('reportModalBody');
-                    if (Array.isArray(result.data)) {
-                        if (result.data.length === 0) {
-                            body.innerHTML = '<div class="text-center text-muted">لا توجد بيانات</div>';
-                        } else {
-                            let html =
-                                '<div class="table-container"><table class="data-table"><thead><tr>';
-                            const keys = Object.keys(result.data[0]);
-                            keys.forEach(k => html += `<th>${k}</th>`);
-                            html += '</tr></thead><tbody>';
-                            result.data.forEach(item => {
-                                html += '<tr>';
-                                keys.forEach(k => html += `<td>${item[k] ?? ''}</td>`);
-                                html += '</tr>';
-                            });
-                            html += '</tbody></table></div>';
-                            body.innerHTML = html;
-                        }
-                    } else {
-                        body.innerHTML =
-                            `<pre style="background:var(--bg-color);padding:16px;border-radius:var(--radius-sm);font-size:0.85rem;overflow:auto;">${JSON.stringify(result.data, null, 2)}</pre>`;
-                    }
-                    document.getElementById('reportModal').classList.add('active');
-                    showToast('تم توليد التقرير', 'success');
-                } else {
-                    showToast(result.error || 'فشل توليد التقرير', 'error');
-                }
+                if (!result.success) throw new Error(result.error || 'فشل توليد التقرير');
+                if (!Object.prototype.hasOwnProperty.call(result, 'data')) throw new Error('لم تُرجع قاعدة البيانات بيانات التقرير');
+                const title = document.getElementById('reportModalTitle');
+                const body = document.getElementById('reportModalBody');
+                const modal = document.getElementById('reportModal');
+                if (!title || !body || !modal) throw new Error('تعذر العثور على نافذة عرض التقرير');
+                currentReportData = result.data;
+                title.textContent = '📊 ' + type.replace(/_/g, ' ').toUpperCase();
+                renderReportData(result.data, body);
+                modal.classList.add('active');
+                showToast('تم توليد التقرير', 'success');
             } catch (e) {
-                showToast('خطأ في توليد التقرير', 'error');
+                console.error('Report generation failed:', type, e);
+                showToast(e?.message || 'خطأ في توليد التقرير', 'error');
             } finally {
                 showLoading(false);
             }
         }
 
         function printReport() {
-            const content = document.getElementById('reportModalBody').innerHTML;
-            const win = window.open('', '_blank');
-            win.document.write(`
-                <html dir="rtl"><head><title>تقرير</title>
-                <style>body{font-family:sans-serif;padding:20px;direction:rtl;}
-                table{width:100%;border-collapse:collapse;margin-top:16px;}
-                th,td{border:1px solid #ccc;padding:8px;text-align:right;}
-                th{background:#1a3a6b;color:#fff;}
-</style></head><body>
-    <h2 style="color:#1a3a6b;">التقرير</h2>
-    ${content}
-    <div style="margin-top:20px;font-size:0.8rem;color:#666;">تم إنشاؤه بواسطة النظام</div>
-</body></html>
-`);
-win.document.close();
-setTimeout(() => win.print(), 500);
+            const title = document.getElementById('reportModalTitle').textContent || 'التقرير';
+            const content = document.getElementById('reportModalBody').innerText || '';
+            if (window.AndroidInterface && typeof window.AndroidInterface.printPlainText === 'function') {
+                if (!window.AndroidInterface.printPlainText(title, content)) showToast('تعذرت تهيئة الطباعة على هذا الجهاز', 'error');
+                return;
+            }
+            window.print();
 }
 
 function exportReportData() {
 if (!currentReportData) { showToast('لا توجد بيانات للتصدير', 'warning'); return; }
-const blob = new Blob([JSON.stringify(currentReportData, null, 2)], { type: 'application/json' });
-const url = URL.createObjectURL(blob);
-const a = document.createElement('a');
-a.href = url;
-a.download = `تقرير_${new Date().toISOString().slice(0,10)}.json`;
-a.click();
-URL.revokeObjectURL(url);
-showToast('تم التصدير', 'success');
+exportJsonFile(`report_${new Date().toISOString().slice(0,10)}.json`, currentReportData);
 }
 
 // ============================================================
@@ -2570,24 +2608,14 @@ document.getElementById('aboutModal').classList.add('active');
 async function exportData() {
 showLoading(true);
 try {
-const allData = {
-services: mockServices,
-customers: mockCustomers,
-suppliers: mockSuppliers,
-sms: mockSms,
-notifications: mockNotifications,
-timestamp: new Date().toISOString()
-};
-const blob = new Blob([JSON.stringify(allData, null, 2)], { type: 'application/json' });
-const url = URL.createObjectURL(blob);
-const a = document.createElement('a');
-a.href = url;
-a.download = `backup_${new Date().toISOString().slice(0,10)}.json`;
-a.click();
-URL.revokeObjectURL(url);
-showToast('تم تصدير النسخة الاحتياطية', 'success');
+const result = await apiCall('export_data');
+if (!result.success) throw new Error(result.error || 'تعذر إنشاء النسخة الاحتياطية');
+exportJsonFile(`backup_${new Date().toISOString().slice(0,10)}.json`, {
+    ...result.data,
+    exported_at: new Date().toISOString()
+});
 } catch (e) {
-showToast('فشل التصدير', 'error');
+showToast(e?.message || 'فشل التصدير', 'error');
 } finally {
 showLoading(false);
 }

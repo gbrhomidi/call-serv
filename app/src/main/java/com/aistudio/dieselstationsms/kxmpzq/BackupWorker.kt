@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-//  محطة أبو أحمد - BackupWorker (مُصحّح ومُحسّن بالكامل)
+//  Telecom Services - scheduled BackupWorker
 // ═══════════════════════════════════════════════════════════════
 //
 //  التحسينات:
@@ -161,12 +161,14 @@ class BackupWorker(
      */
     private fun isValidExport(data: JSONObject): Boolean {
         return try {
-            // التحقق من وجود الجداول الأساسية
+            // Validate the tables actually emitted by DatabaseHelper.exportAllData().
             val requiredKeys = arrayOf(
                 "customers",
-                "refills",
-                "transactions",
-                "payments"
+                "services",
+                "suppliers",
+                "transfers",
+                "activations",
+                "settings"
             )
             requiredKeys.all { key -> data.has(key) && data.get(key) is JSONArray }
         } catch (e: Exception) {

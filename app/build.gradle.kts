@@ -1,89 +1,99 @@
-// app/build.gradle.kts
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val localSigningProperties = Properties().apply {
+    val propertiesFile = rootProject.file("keystore.properties")
+    if (propertiesFile.isFile) propertiesFile.inputStream().use { load(it) }
+}
+fun signingValue(environmentName: String, propertyName: String): String =
+    System.getenv(environmentName)?.takeIf { it.isNotBlank() }
+        ?: localSigningProperties.getProperty(propertyName).orEmpty().takeIf { it.isNotBlank() }.orEmpty()
+
+val releaseKeystorePath = signingValue("KEYSTORE_FILE", "storeFile").takeIf { it.isNotBlank() }
 android {
-    namespace = "com.aistudio.dieselstationsms.kxmpzq" // ضع اسم الحزمة الخاص بك
+    namespace = "com.aistudio.dieselstationsms.kxmpzq"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.aistudio.dieselstationsms.kxmpzq"
+        applicationId = "com.aistudio.telecomactivation"
         minSdk = 21
         targetSdk = 34
-        // يجب أن يزيد عن النسخة المثبتة حتى يطلب Android ترقية لا تثبيتًا جديدًا.
-        versionCode = 301
-        versionName = "3.0.1"
-
+        // Keep the applicationId/signing key stable and increment above the original 300 build.
+        versionCode = 302
+        versionName = "3.0.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
-        create("ciRelease") {
-            storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+        if (releaseKeystorePath != null) {
+            create("release") {
+                storeFile = file(releaseKeystorePath)
+                storePassword = signingValue("KEYSTORE_PASSWORD", "storePassword")
+                keyAlias = signingValue("KEY_ALIAS", "keyAlias")
+                keyPassword = signingValue("KEY_PASSWORD", "keyPassword")
+            }
         }
     }
 
     buildTypes {
-        release {
+        // Keep the ordinary debug variant debuggable; CI distributes this smaller, debug-signed variant.
+        create("minified") {
+            initWith(getByName("debug"))
+            isDebuggable = false
             isMinifyEnabled = true
-            signingConfig = signingConfigs.getByName("ciRelease")
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
-        debug {
-            isMinifyEnabled = false
+        getByName("release") {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (releaseKeystorePath != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
-    }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
-    }
-
-    kotlinOptions {
-        jvmTarget = "1.8"
     }
 
     buildFeatures {
-        viewBinding = true
         compose = true
+        viewBinding = true
     }
 
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+    kotlinOptions { jvmTarget = "17" }
+
     packaging {
-        resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        }
+        resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     }
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.12.0")
-    implementation("androidx.appcompat:appcompat:1.6.1")
-    implementation("com.google.android.material:material:1.11.0")
-    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.activity:activity-compose:1.9.3")
-    implementation(platform("androidx.compose:compose-bom:2025.02.00"))
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-    implementation("androidx.biometric:biometric:1.1.0") // للمصادقة البيومترية
-    implementation("androidx.security:security-crypto:1.1.0-alpha06") // للتشفير
-
-    // اختياري: دعم WorkManager للمهام الخلفية
-    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    implementation("androidx.compose.ui:ui:1.7.6")
+    implementation("androidx.compose.ui:ui-graphics:1.7.6")
+    implementation("androidx.compose.material3:material3:1.3.1")
+    implementation("androidx.biometric:biometric:1.1.0")
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
 
     testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.1.5")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
 }

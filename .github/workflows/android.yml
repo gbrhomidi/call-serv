@@ -4,88 +4,326 @@ on:
   push:
     branches:
       - main
-      - develop
+      - feat/sms-activation-bank-reconciliation
   pull_request:
     branches:
       - main
   workflow_dispatch:
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+concurrency:
+  group: android-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
+permissions:
+  contents: read
+
+env:
+  GRADLE_OPTS: >-
+    -Dorg.gradle.daemon=false
+    -Dorg.gradle.parallel=true
+    -Dorg.gradle.caching=true
+
+jobs:
+  # Signing secrets are never exposed to pull_request jobs, including same-repository PRs.
+  verify-secrets:
+    name: Verify Release Signing Secrets
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/sms-activation-bank-reconciliation')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check required secret names and alias
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          EXPECTED_CERT_SHA256: ${{ secrets.EXPECTED_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing required Actions secret name: ${name}"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::Add the four signing secrets under Settings > Secrets and variables > Actions. Secret values are never printed."
+            exit 1
+          fi
+          if [ "$KEY_ALIAS" != "call-serv" ]; then
+            echo "::error::KEY_ALIAS must be the configured alias 'call-serv'. The secret value is not printed."
+            exit 1
+          fi
+
+          expected="$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+          if [ -n "$expected" ] && [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::EXPECTED_CERT_SHA256 must contain a 64-character SHA-256 fingerprint, with or without colons."
+            exit 1
+          fi
+          if [ "$GITHUB_REF" = "refs/heads/main" ] && [ -z "$expected" ]; then
+            echo "::error::Set EXPECTED_CERT_SHA256 from the first trusted verification summary before producing a production Release APK."
+            exit 1
+          fi
+          echo "All required signing secret names are present; alias format is valid."
+
+      - name: Decode keystore and verify certificate fingerprint
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          EXPECTED_CERT_SHA256: ${{ secrets.EXPECTED_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          key_path="$RUNNER_TEMP/verify-call-serv.keystore"
+          keytool_output="$RUNNER_TEMP/call-serv-keytool.txt"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$key_path"
+          if [ ! -s "$key_path" ]; then
+            echo "::error::Decoded keystore is empty."
+            exit 1
+          fi
+          chmod 600 "$key_path"
+          echo "Decoded keystore size: $(wc -c < "$key_path") bytes"
+
+          if ! keytool -list -v -keystore "$key_path" -storepass:env KEYSTORE_PASSWORD -alias "$KEY_ALIAS" > "$keytool_output" 2>&1; then
+            echo "::error::Keystore could not be opened with the supplied password/alias. Check the secret configuration."
+            exit 1
+          fi
+          printf 'CallServ signing secret validation only.\n' > "$RUNNER_TEMP/call-serv-secret-check.txt"
+          jar --create --file "$RUNNER_TEMP/call-serv-secret-check.jar" -C "$RUNNER_TEMP" call-serv-secret-check.txt
+          if ! jarsigner -keystore "$key_path" -storepass:env KEYSTORE_PASSWORD -keypass:env KEY_PASSWORD \
+              -signedjar "$RUNNER_TEMP/call-serv-secret-check-signed.jar" \
+              "$RUNNER_TEMP/call-serv-secret-check.jar" "$KEY_ALIAS" > /dev/null 2>&1; then
+            echo "::error::Keystore opens, but the private-key password/alias could not sign a temporary test file. Check KEY_PASSWORD and KEY_ALIAS."
+            exit 1
+          fi
+          jarsigner -verify "$RUNNER_TEMP/call-serv-secret-check-signed.jar" > /dev/null
+          fingerprint="$(awk -F': ' '/SHA256:/ { gsub(/[:[:space:]]/, "", $2); print tolower($2); exit }' "$keytool_output")"
+          if [[ ! "$fingerprint" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Could not extract a valid SHA-256 certificate fingerprint."
+            exit 1
+          fi
+
+          expected="$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+          if [ -n "$expected" ] && [ "$fingerprint" != "$expected" ]; then
+            echo "::error::Keystore fingerprint does not match EXPECTED_CERT_SHA256. Refusing to build with a different signing identity."
+            exit 1
+          fi
+
+          formatted="$(printf '%s' "$fingerprint" | sed 's/../&:/g; s/:$//' | tr '[:lower:]' '[:upper:]')"
+          echo "::notice::Verified release certificate SHA-256: $formatted"
+          {
+            echo "### Release Keystore Verification"
+            echo ""
+            echo "| Item | Value |"
+            echo "|---|---|"
+            echo "| Alias | call-serv |"
+            echo "| Certificate SHA-256 | $formatted |"
+            echo "| Keystore size | $(wc -c < "$key_path") bytes |"
+            echo ""
+            if [ -z "$expected" ]; then
+              echo "> Set repository secret EXPECTED_CERT_SHA256 to this fingerprint before a production Release is built."
+            else
+              echo "> Fingerprint matches the pinned EXPECTED_CERT_SHA256 secret."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove verification keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/verify-call-serv.keystore" "$RUNNER_TEMP/call-serv-keytool.txt" "$RUNNER_TEMP/call-serv-secret-check.txt" "$RUNNER_TEMP/call-serv-secret-check.jar" "$RUNNER_TEMP/call-serv-secret-check-signed.jar"
+
+  validate:
+    name: Validate Android Project
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout Project
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
+      - name: Set up Java 17 and Gradle cache
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
 
-      - name: Verify Java version
-        run: java -version
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      # توليد debug.keystore في المجلد الصحيح
-      - name: Generate debug keystore (if missing)
+      - name: Verify Gradle wrapper
         run: |
-          mkdir -p ~/.android
-          if [ ! -f ~/.android/debug.keystore ]; then
-            echo "🔑 Generating debug.keystore..."
-            keytool -genkey -v -keystore ~/.android/debug.keystore \
-              -alias androiddebugkey \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -storepass android \
-              -keypass android \
-              -dname "CN=Android Debug, O=Android, C=US"
-            echo "✅ debug.keystore generated."
-          else
-            echo "✅ debug.keystore already exists."
-          fi
+          set -euo pipefail
+          test -f ./gradlew || { echo "::error::gradlew is missing."; exit 1; }
+          test -f ./gradle/wrapper/gradle-wrapper.properties || { echo "::error::Gradle wrapper configuration is missing."; exit 1; }
+          chmod +x ./gradlew
 
-      # تنظيف وبناء APK للإصدار (Release)
-      - name: Clean and Build Release APK
-        run: ./gradlew clean assembleRelease --no-daemon -PGEMINI_API_KEY=$GEMINI_API_KEY
+      - name: Verify and run SMS activation smoke tests
+        run: |
+          set -euo pipefail
+          test -f ./screen-smoke-test.py || { echo "::error::screen-smoke-test.py is missing."; exit 1; }
+          python3 ./screen-smoke-test.py
+
+      - name: Run Kotlin and Robolectric regression tests
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
+
+      - name: Compile minified fresh-install APK
+        run: ./gradlew :app:assembleMinified --no-daemon
+
+      # Feature-branch APKs are minified, debug-key signed, and for fresh installs only.
+      - name: Verify and prepare fresh-install APK from requested branch
+        if: >-
+          (github.ref == 'refs/heads/feat/sms-activation-bank-reconciliation' && github.event_name != 'pull_request') ||
+          (github.event_name == 'pull_request' && github.head_ref == 'feat/sms-activation-bank-reconciliation')
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-
-      # عرض معلومات APK
-      - name: List APK outputs
+          APK_PATH: app/build/outputs/apk/minified/app-minified.apk
         run: |
-          echo "===== APK FILES ====="
-          find app/build -type f -name "*.apk"
-          echo
-          echo "===== APK DETAILS ====="
-          ls -lahR app/build/outputs || true
+          set -euo pipefail
+          test -s "$APK_PATH" || { echo "::error::Minified APK is missing or empty."; exit 1; }
+          apk_bytes="$(stat -c '%s' "$APK_PATH")"
+          max_bytes=$((8 * 1024 * 1024))
+          if [ "$apk_bytes" -gt "$max_bytes" ]; then
+            echo "::error::Minified APK exceeds the 8 MiB size budget (${apk_bytes} bytes). Review dependencies/resources before raising this limit."
+            exit 1
+          fi
+          echo "Optimized APK size: ${apk_bytes} bytes (limit: ${max_bytes} bytes)."
+          build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          test -x "$build_tools/apksigner" || { echo "::error::apksigner was not found."; exit 1; }
+          test -x "$build_tools/aapt" || { echo "::error::aapt was not found."; exit 1; }
+          "$build_tools/apksigner" verify --verbose "$APK_PATH"
+          AAPT_PATH="$build_tools/aapt" python3 - <<'PY'
+          import os, re, subprocess, sys
+          output = subprocess.check_output([os.environ["AAPT_PATH"], "dump", "badging", os.environ["APK_PATH"]], text=True)
+          match = re.search(r"^package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']*)'", output, re.MULTILINE)
+          if not match:
+             sys.exit("::error::Could not read package/version metadata from the APK.")
+          package, version_code, version_name = match.groups()
+          if package != "com.aistudio.telecomactivation":
+             sys.exit(f"::error::Unexpected applicationId: {package}")
+          if int(version_code) < 302:
+              sys.exit(f"::error::Expected versionCode >= 302, got {version_code}.")
+          print(f"Verified installable feature APK: {package}, versionCode={version_code}, versionName={version_name}")
+          PY
+          rm -rf feature-apk
+          mkdir -p feature-apk
+          cp "$APK_PATH" feature-apk/CallServ_SMS_Activation_FreshInstall.apk
+          (cd feature-apk && sha256sum CallServ_SMS_Activation_FreshInstall.apk > SHA256SUMS.txt)
 
-      # رفع APK كـ Artifact
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Upload installable APK from feature branch
+        if: >-
+          (github.ref == 'refs/heads/feat/sms-activation-bank-reconciliation' && github.event_name != 'pull_request') ||
+          (github.event_name == 'pull_request' && github.head_ref == 'feat/sms-activation-bank-reconciliation')
+        uses: actions/upload-artifact@v6
         with:
-          name: Telecom_Services_Activation_APK
-          path: app/build/outputs/**/*.apk
+          name: CallServ_SMS_Activation_FreshInstall
+          path: |
+            feature-apk/CallServ_SMS_Activation_FreshInstall.apk
+            feature-apk/SHA256SUMS.txt
           if-no-files-found: error
+          retention-days: 14
 
-      # (اختياري) رفع تقرير الاختبارات
-      - name: Upload Test Reports
+  release:
+    name: Build Signed Upgrade APK
+    needs: [validate, verify-secrets]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Project
+        uses: actions/checkout@v7
+
+      - name: Set up Java 17 and Gradle cache
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Decode production keystore outside workspace
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          key_path="$RUNNER_TEMP/call-serv-release.keystore"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$key_path"
+          if [ ! -s "$key_path" ]; then
+            echo "::error::Decoded production keystore is empty."
+            exit 1
+          fi
+          chmod 600 "$key_path"
+          echo "path=$key_path" >> "$GITHUB_OUTPUT"
+
+      - name: Build signed Release APK
+        env:
+          KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew clean :app:assembleRelease --no-daemon
+
+      - name: Locate and verify signed Release APK
+        id: apk
+        env:
+          EXPECTED_CERT_SHA256: ${{ secrets.EXPECTED_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          test -d app/build/outputs/apk/release || { echo "::error::Release APK output directory is missing."; exit 1; }
+          mapfile -t apks < <(find app/build/outputs/apk/release -type f -name '*.apk' ! -name '*-unsigned.apk' ! -name '*-unaligned.apk' | sort)
+          if [ "${#apks[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one signed Release APK, found ${#apks[@]}."
+            printf '%s\n' "${apks[@]}"
+            exit 1
+          fi
+          apk_path="${apks[0]}"
+          test -s "$apk_path" || { echo "::error::Release APK is empty."; exit 1; }
+          build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          signer_output="$("$build_tools/apksigner" verify --verbose --print-certs "$apk_path")"
+          printf '%s\n' "$signer_output"
+          actual="$(printf '%s\n' "$signer_output" | awk -F': ' '/certificate SHA-256 digest:/ { print tolower($NF); exit }' | tr -d ':[:space:]')"
+          expected="$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+          if [ -z "$expected" ] || [ "$actual" != "$expected" ]; then
+            echo "::error::Signed APK fingerprint does not match EXPECTED_CERT_SHA256."
+            exit 1
+          fi
+          AAPT_PATH="$build_tools/aapt" APK_PATH="$apk_path" python3 - <<'PY'
+          import os, re, subprocess, sys
+          output = subprocess.check_output([os.environ["AAPT_PATH"], "dump", "badging", os.environ["APK_PATH"]], text=True)
+          match = re.search(r"^package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']*)'", output, re.MULTILINE)
+          if not match:
+             sys.exit("::error::Could not read package/version metadata from the APK.")
+          package, version_code, version_name = match.groups()
+          if package != "com.aistudio.telecomactivation":
+             sys.exit(f"::error::Unexpected applicationId: {package}")
+          if int(version_code) < 302:
+              sys.exit(f"::error::versionCode {version_code} is below the production baseline 302.")
+          print(f"Verified production update APK: {package}, versionCode={version_code}, versionName={version_name}")
+          PY
+          echo "path=$apk_path" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare APK and SHA256 checksum
+        env:
+          APK_PATH: ${{ steps.apk.outputs.path }}
+        run: |
+          set -euo pipefail
+          rm -rf release-artifact
+          mkdir -p release-artifact
+          cp "$APK_PATH" release-artifact/CallServ_SMS_Activation_Release.apk
+          (cd release-artifact && sha256sum CallServ_SMS_Activation_Release.apk > SHA256SUMS.txt)
+          ls -lh release-artifact
+          cat release-artifact/SHA256SUMS.txt
+
+      - name: Remove production keystore from runner
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Test_Reports
-          path: app/build/reports/
-          if-no-files-found: ignore
+        run: rm -f "$RUNNER_TEMP/call-serv-release.keystore"
 
-      # (اختياري) رفع سجلات البناء
-      - name: Upload Build Logs
-        if: failure()
-        uses: actions/upload-artifact@v4
+      - name: Upload signed upgrade APK
+        uses: actions/upload-artifact@v6
         with:
-          name: Build_Logs
-          path: app/build/outputs/logs/
-          if-no-files-found: ignore
+          name: CallServ_SMS_Activation_Release
+          path: |
+            release-artifact/CallServ_SMS_Activation_Release.apk
+            release-artifact/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14

@@ -18,16 +18,16 @@
          ═══════════════════════════════════════════════════════════ -->
 
     <!-- اسم التطبيق الرسمي -->
-    <string name="app_name">محطة أبو أحمد لمشتقات الديزل</string>
+    <string name="app_name">تفعيل خدمات شركات الاتصالات</string>
 
     <!-- اسم مختصر للتطبيق -->
-    <string name="app_name_short">أبو أحمد</string>
+    <string name="app_name_short">تفعيل الخدمات</string>
 
     <!-- شعار التطبيق -->
-    <string name="app_tagline">نظام إدارة محطة وقود متطور</string>
+    <string name="app_tagline">تفعيل خدمات الاتصالات عبر الرسائل النصية</string>
 
     <!-- اسم الشركة/المالك -->
-    <string name="company_name">محطة أبو أحمد</string>
+    <string name="company_name">تفعيل خدمات شركات الاتصالات</string>
 
     <!-- العنوان الكامل -->
     <string name="full_address">بجانب مدرسة الاتحاد برأس وادي ثاة - الحميدة - العرش</string>
@@ -37,7 +37,7 @@
          ═══════════════════════════════════════════════════════════ -->
 
     <string name="login_title">تسجيل الدخول</string>
-    <string name="login_subtitle">مرحباً بك في نظام محطة أبو أحمد</string>
+    <string name="login_subtitle">مرحباً بك في تفعيل خدمات شركات الاتصالات</string>
     <string name="login_username_hint">اسم المستخدم</string>
     <string name="login_password_hint">كلمة المرور</string>
     <string name="login_button">دخول</string>
@@ -233,11 +233,8 @@
 الرصيد: %2$s ريال
 نقاط: %3$d
 العضوية: %4$s</string>
-    <string name="sms_auto_reply_help">مرحباً بك في محطة أبو أحمد!
-الخدمات:
-1. رصيد (أرسل: رصيد)
-2. عروض (أرسل: عروض)
-3. موقع (أرسل: موقع)</string>
+    <string name="sms_auto_reply_help">مرحباً بك في تفعيل خدمات شركات الاتصالات!
+للمساعدة حول التفعيل، يرجى التواصل مع الدعم.</string>
     <string name="sms_auto_reply_offers">عروض اليوم:
 - سعر اللتر: 500 ريال
 - خصم الولاء: 5% للذهبيين
@@ -252,7 +249,7 @@
          ═══════════════════════════════════════════════════════════ -->
 
     <string name="ai_title">المساعد الذكي</string>
-    <string name="ai_welcome">مرحباً! أنا مساعد محطة أبو أحمد. كيف يمكنني مساعدتك؟</string>
+    <string name="ai_welcome">مرحباً! أنا مساعد تفعيل خدمات شركات الاتصالات. كيف يمكنني مساعدتك؟</string>
     <string name="ai_input_hint">اكتب سؤالك هنا…</string>
     <string name="ai_send">إرسال</string>
     <string name="ai_typing">يكتب…</string>
@@ -510,7 +507,7 @@
 
     <string name="splash_loading">جاري التحميل…</string>
     <string name="splash_welcome">أهلاً بك في</string>
-    <string name="splash_app_name">محطة أبو أحمد</string>
+    <string name="splash_app_name">تفعيل خدمات شركات الاتصالات</string>
     <string name="splash_init_db">جاري تهيئة قاعدة البيانات…</string>
     <string name="splash_init_server">جاري تشغيل الخادم المحلي…</string>
     <string name="splash_check_updates">جاري التحقق من التحديثات…</string>
@@ -543,9 +540,9 @@
     <string name="about_title">عن التطبيق</string>
     <string name="about_version">الإصدار %1$s</string>
     <string name="about_build">رقم البناء: %1$d</string>
-    <string name="about_description">نظام إدارة محطة وقود متطور مع دعم SMS، الذكاء الاصطناعي، ونظام الولاء</string>
+    <string name="about_description">نظام لإدارة طلبات تفعيل خدمات شركات الاتصالات ومطابقة الدفع عبر الرسائل النصية</string>
     <string name="about_developer">تم التطوير بواسطة: AI Studio</string>
-    <string name="about_copyright">© 2026 محطة أبو أحمد. جميع الحقوق محفوظة.</string>
+    <string name="about_copyright">© 2026 تفعيل خدمات شركات الاتصالات. جميع الحقوق محفوظة.</string>
     <string name="about_privacy_policy">سياسة الخصوصية</string>
     <string name="about_terms">شروط الاستخدام</string>
     <string name="about_contact">تواصل معنا</string>
@@ -556,9 +553,9 @@
           خدمة المقدمة (Foreground Service)
          ═══════════════════════════════════════════════════════════ -->
 
-    <string name="service_notification_title">⛽ محطة أبو أحمد</string>
+    <string name="service_notification_title">تفعيل خدمات شركات الاتصالات</string>
     <string name="service_notification_text">الخادم المحلي يعمل…</string>
-    <string name="service_channel_name">خدمة المحطة</string>
+    <string name="service_channel_name">خدمة تفعيل الاتصالات</string>
     <string name="service_channel_description">قناة إشعارات خدمة الخادم المحلي</string>
     <string name="service_running">الخدمة تعمل</string>
     <string name="service_stopped">الخدمة متوقفة</string>
@@ -638,7 +635,7 @@
           نصوص إضافية متنوعة (Miscellaneous)
          ═══════════════════════════════════════════════════════════ -->
 
-    <string name="welcome_message">مرحباً بك في نظام محطة أبو أحمد!</string>
+    <string name="welcome_message">مرحباً بك في تفعيل خدمات شركات الاتصالات!</string>
     <string name="good_morning">صباح الخير</string>
     <string name="good_afternoon">مساء الخير</string>
     <string name="good_evening">مساء الخير</string>
@@ -654,7 +651,7 @@
     <string name="rate_later">لاحقاً</string>
     <string name="never_ask">لا تسأل مرة أخرى</string>
     <string name="share_via">مشاركة عبر</string>
-    <string name="share_text">جرب تطبيق محطة أبو أحمد! %1$s</string>
+    <string name="share_text">جرّب تطبيق تفعيل خدمات شركات الاتصالات! %1$s</string>
     <string name="copied_to_clipboard">تم النسخ إلى الحافظة</string>
     <string name="not_implemented">لم يتم التنفيذ بعد</string>
 

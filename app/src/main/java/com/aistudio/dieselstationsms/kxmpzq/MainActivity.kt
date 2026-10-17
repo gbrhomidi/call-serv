@@ -2,6 +2,7 @@ package com.aistudio.dieselstationsms.kxmpzq
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
@@ -10,6 +11,8 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.print.PrintAttributes
+import android.print.PrintManager
 import android.util.Log
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
@@ -39,11 +42,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
+import androidx.core.content.FileProvider
 import com.aistudio.dieselstationsms.kxmpzq.ui.theme.MyApplicationTheme
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -57,7 +59,6 @@ import java.util.concurrent.atomic.AtomicBoolean
  * - عرض واجهة المستخدم عبر WebView (تحميل من assets)
  * - توفير جسر (AndroidInterface) للتواصل بين JavaScript و Kotlin
  * - إدارة صلاحيات SMS
- * - تشغيل خدمة الخلفية (SMSService)
  * - معالجة الأخطاء وإعادة المحاولة لتحميل WebView
  * - دعم الوضع الليلي/النهاري
  * ═══════════════════════════════════════════════════════════════
@@ -67,7 +68,6 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "MainActivity"
         private const val PERMISSION_REQUEST_CODE = 1001
-        private const val SERVICE_START_DELAY_MS = 1000L
         private const val WEBVIEW_LOAD_DELAY_MS = 2000L
         private const val WEBVIEW_INITIAL_RETRY_DELAY_MS = 1000L
         private const val WEBVIEW_MAX_RETRY_DELAY_MS = 15000L
@@ -79,6 +79,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var webView: WebView? = null
+    private val printWebViews = mutableSetOf<WebView>()
     private val isDestroyed = AtomicBoolean(false)
     private val handler = Handler(Looper.getMainLooper())
     private var webViewRetryCount = 0
@@ -114,14 +115,6 @@ class MainActivity : AppCompatActivity() {
 
         // طلب صلاحيات SMS
         requestAllPermissions()
-
-        // بدء خدمة SMS بعد تأخير بسيط
-        lifecycleScope.launch {
-            delay(SERVICE_START_DELAY_MS)
-            if (!isDestroyed.get()) {
-                startSMSService()
-            }
-        }
 
         // إعداد واجهة Compose مع WebView
         try {
@@ -164,7 +157,6 @@ class MainActivity : AppCompatActivity() {
         Log.d(TAG, "onDestroy called")
         isDestroyed.set(true)
         handler.removeCallbacksAndMessages(null)
-        stopSMSService()
 
         try {
             val wv = webView
@@ -172,6 +164,8 @@ class MainActivity : AppCompatActivity() {
                 destroyWebView(wv)
                 webView = null
             }
+            printWebViews.toList().forEach { destroyWebView(it) }
+            printWebViews.clear()
         } catch (e: Exception) {
             Log.e(TAG, "Error during WebView cleanup in onDestroy", e)
         }
@@ -189,16 +183,14 @@ class MainActivity : AppCompatActivity() {
         if (!isPermissionGranted(Manifest.permission.SEND_SMS)) {
             permissions.add(Manifest.permission.SEND_SMS)
         }
+        if (!isPermissionGranted(Manifest.permission.CALL_PHONE)) {
+            permissions.add(Manifest.permission.CALL_PHONE)
+        }
         if (!isPermissionGranted(Manifest.permission.RECEIVE_SMS)) {
             permissions.add(Manifest.permission.RECEIVE_SMS)
         }
         if (!isPermissionGranted(Manifest.permission.READ_SMS)) {
             permissions.add(Manifest.permission.READ_SMS)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (!isPermissionGranted(Manifest.permission.POST_NOTIFICATIONS)) {
-                permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-            }
         }
 
         if (permissions.isNotEmpty()) {
@@ -247,38 +239,7 @@ class MainActivity : AppCompatActivity() {
 
     // ============================================================
     // تشغيل وإيقاف خدمة SMS
-    // ============================================================
-
-    private fun startSMSService() {
-        if (isDestroyed.get()) {
-            Log.w(TAG, "Activity is destroyed, not starting service")
-            return
-        }
-        try {
-            val intent = Intent(this, SMSService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(intent)
-            } else {
-                startService(intent)
-            }
-            Log.d(TAG, "SMSService started successfully")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error starting SMSService", e)
-            Toast.makeText(this, "فشل في بدء الخدمة", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun stopSMSService() {
-        try {
-            val intent = Intent(this, SMSService::class.java)
-            stopService(intent)
-            Log.d(TAG, "SMSService stopped")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error stopping SMSService", e)
-        }
-    }
-
-    // ============================================================
+    // WebView – التحميل والإدارة
     // WebView – التحميل والإدارة
     // ============================================================
 
@@ -542,6 +503,10 @@ class MainActivity : AppCompatActivity() {
         private val activity: MainActivity
     ) {
         @JavascriptInterface
+        fun execute(action: String, rawParams: String): String =
+            TelecomWebApi(context).execute(action, rawParams)
+
+        @JavascriptInterface
         fun showToast(message: String) {
             if (isDestroyed.get()) return
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
@@ -593,39 +558,156 @@ class MainActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
+        fun getPersistentSetting(key: String): String {
+            val allowed = setOf("system_bank_name", "system_bank_account_name", "system_bank_sender_phone", "activation_provider_phone", "activation_provider_balance", "supplier_balance_query_sms", "sms_enabled", "app_active")
+            if (key !in allowed) return ""
+            return try { DatabaseHelper.getInstance(context).getSetting(key) } catch (_: Exception) { "" }
+        }
+
+        @JavascriptInterface
+        fun setPersistentSetting(key: String, value: String): Boolean {
+            val allowed = setOf("system_bank_name", "system_bank_account_name", "system_bank_sender_phone", "activation_provider_phone", "activation_provider_balance", "supplier_balance_query_sms", "sms_enabled", "app_active")
+            if (key !in allowed || value.length > 200 || (key in setOf("sms_enabled", "app_active") && value !in setOf("true", "false"))) return false
+            return try { DatabaseHelper.getInstance(context).setSetting(key, value.trim()) } catch (_: Exception) { false }
+        }
+
+        @JavascriptInterface
+        fun getSmsServiceCatalog(): String {
+            return try { DatabaseHelper.getInstance(context).getServices(status = "active").toString() } catch (_: Exception) { "[]" }
+        }
+
+        @JavascriptInterface
+        fun setServiceActivationTemplate(serviceCode: String, command: String): Boolean {
+            if (serviceCode.length > 40 || command.length > 200 || SmsTextAnalysis.buildUssdCommand(command, "777000001") == null) return false
+            return try {
+                val db = DatabaseHelper.getInstance(context)
+                db.getServiceByCode(serviceCode) ?: return false
+                db.setActivationCommand(serviceCode, command.trim())
+            } catch (_: Exception) { false }
+        }
+
+        @JavascriptInterface
         fun getGeminiApiKey(): String {
             // يمكن قراءة المفتاح من .env إذا لزم الأمر
             return "not_configured"
         }
 
         @JavascriptInterface
-        fun execute(action: String, paramsJson: String): String {
+        fun exportJsonFile(filename: String, json: String): Boolean {
+            if (json.length > 5_000_000) return false
             return try {
-                val params = org.json.JSONObject(paramsJson.ifBlank { "{}" })
-                val db = DatabaseHelper.getInstance(context)
-                val result = org.json.JSONObject().put("success", true)
-                when (action) {
-                    "get_services" -> result.put("data", db.getServices(params.optString("type", null), params.optString("status", null)))
-                    "save_service" -> {
-                        val id = params.optInt("id", 0)
-                        val saved: Long = if (id > 0) db.updateService(id, params).toLong() else db.addService(params)
-                        if (saved <= 0L) result.put("success", false).put("error", "قالب USSD غير صالح؛ يجب أن يحتوي على phone")
-                        else result.put("data", saved)
-                    }
-                    "get_telecom_providers" -> result.put("data", db.getTelecomProviders(params.optString("status", "active")))
-                    "save_telecom_provider" -> result.put("data", db.saveTelecomProvider(params))
-                    "get_payment_accounts" -> result.put("data", db.getPaymentAccounts(params.optString("status", "active")))
-                    "save_payment_account" -> result.put("data", db.savePaymentAccount(params))
-                    "get_customers" -> result.put("data", db.getCustomers(params.optString("status", null)))
-                    "get_suppliers" -> result.put("data", db.getSuppliers(params.optString("status", null)))
-                    "get_sms" -> result.put("data", db.getSmsLogs())
-                    else -> result.put("success", false).put("error", "أمر غير مدعوم: $action")
+                val safeName = filename.replace(Regex("[^A-Za-z0-9._-]"), "_")
+                    .take(100).ifBlank { "export.json" }
+                val directory = File(context.filesDir, "exports").apply { mkdirs() }
+                val file = File(directory, safeName)
+                file.writeText(json, Charsets.UTF_8)
+                val uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/json"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    clipData = ClipData.newUri(context.contentResolver, safeName, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                result.toString()
+                activity.runOnUiThread {
+                    if (!isDestroyed.get()) {
+                        activity.startActivity(Intent.createChooser(shareIntent, "حفظ أو مشاركة الملف"))
+                    }
+                }
+                true
             } catch (e: Exception) {
-                org.json.JSONObject().put("success", false).put("error", e.message ?: "فشل تنفيذ العملية").toString()
+                Log.e(TAG, "Failed to prepare JSON export", e)
+                false
             }
         }
+
+        @JavascriptInterface
+        fun exportCollection(collection: String): Boolean {
+            if (collection !in setOf("services", "customers", "sms")) return false
+            return try {
+                val safeName = "${collection}_${System.currentTimeMillis()}.json"
+                val directory = File(context.filesDir, "exports").apply { mkdirs() }
+                val file = File(directory, safeName)
+                file.bufferedWriter(Charsets.UTF_8).use { writer ->
+                    writer.append("{\"collection\":")
+                        .append(org.json.JSONObject.quote(collection))
+                        .append(",\"exported_at_epoch_ms\":")
+                        .append(System.currentTimeMillis().toString())
+                        .append(",\"data\":[")
+                    val rowCount = DatabaseHelper.getInstance(context).writeExportRows(collection, writer)
+                    writer.append("],\"row_count\":").append(rowCount.toString()).append('}')
+                }
+                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/json"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    clipData = ClipData.newUri(context.contentResolver, safeName, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                activity.runOnUiThread {
+                    if (!isDestroyed.get()) activity.startActivity(Intent.createChooser(shareIntent, "حفظ أو مشاركة ملف $collection"))
+                }
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to export SQLite collection: $collection", e)
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun printPlainText(title: String, body: String): Boolean {
+            if (body.length > 500_000) return false
+            return try {
+                activity.runOnUiThread {
+                    if (isDestroyed.get()) return@runOnUiThread
+                    val printView = WebView(activity)
+                    printWebViews.add(printView)
+                    val safeTitle = title.take(120).ifBlank { "التقرير" }
+                    val escapedTitle = safeTitle.escapeHtml()
+                    val escapedBody = body.escapeHtml()
+                    val html = """
+                        <!doctype html><html dir="rtl"><head><meta charset="utf-8">
+                        <style>body{font-family:sans-serif;padding:24px;direction:rtl;color:#222}
+                        h1{font-size:20px;border-bottom:1px solid #bbb;padding-bottom:10px}
+                        pre{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.8 sans-serif}</style>
+                        </head><body><h1>$escapedTitle</h1><pre>$escapedBody</pre></body></html>
+                    """.trimIndent()
+                    printView.settings.javaScriptEnabled = false
+                    printView.webViewClient = object : WebViewClient() {
+                        override fun onPageFinished(view: WebView, url: String?) {
+                            try {
+                                val manager = activity.getSystemService(Context.PRINT_SERVICE) as PrintManager
+                                manager.print(
+                                    safeTitle,
+                                    view.createPrintDocumentAdapter(safeTitle),
+                                    PrintAttributes.Builder()
+                                        .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                                        .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
+                                        .build()
+                                )
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Unable to start print job", e)
+                                Toast.makeText(activity, "تعذرت تهيئة الطباعة", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                    printView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+                }
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Unable to prepare print page", e)
+                false
+            }
+        }
+
+        private fun String.escapeHtml(): String = replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&#39;")
     }
 
     private fun safeEvaluateJs(script: String) {

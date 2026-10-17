@@ -48,10 +48,10 @@ navigationCompose = "2.8.5"            # Navigation Compose
 junit = "4.13.2"                       # JUnit 4
 junitVersion = "1.2.1"                 # AndroidX JUnit
 espressoCore = "3.6.1"                 # Espresso (اختبارات UI)
-core = "1.6.1"                         # AndroidX Test Core
+robolectric = "4.14.1"
+roborazzi = "1.44.0"
+core = "1.6.1"                           # AndroidX Test Core
 runner = "1.6.2"                       # AndroidX Test Runner
-robolectric = "4.14.1"                 # اختبارات Android على JVM
-roborazzi = "1.39.0"                   # اختبارات لقطات اختيارية
 
 # ============================================================
 #  Network - الاتصال بالشبكة والخوادم
