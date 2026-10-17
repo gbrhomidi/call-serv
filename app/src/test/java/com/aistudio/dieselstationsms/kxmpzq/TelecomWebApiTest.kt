@@ -129,6 +129,22 @@ class TelecomWebApiTest {
     }
 
     @Test
+    fun `telecom company API persists the submitted name and fields`() {
+        val result = call("save_telecom_company", JSONObject()
+            .put("name", "شركة اختبار")
+            .put("ussd_phone", "*123#")
+            .put("prefix1", "77")
+            .put("balance_phone", "777000111"))
+        assertTrue("Company save failed: ${result.optString("error")}", result.optBoolean("success"))
+        val id = result.getJSONObject("data").getInt("id")
+        val companies = call("get_telecom_companies").getJSONArray("data")
+        val saved = (0 until companies.length()).map { companies.getJSONObject(it) }.first { it.getInt("id") == id }
+        assertEquals("شركة اختبار", saved.getString("name"))
+        assertEquals("77", saved.getString("prefix1"))
+        assertEquals("777000111", saved.getString("balance_phone"))
+    }
+
+    @Test
     fun `all reports used by the visible UI return successful real database results`() {
         val reportTypes = listOf(
             "full_customers", "full_services", "full_sms", "full_financial",

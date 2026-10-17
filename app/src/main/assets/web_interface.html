@@ -1354,41 +1354,6 @@
                     <div class="form-group"><label><input type="checkbox" id="smsEnabled" checked> تفعيل رسائل SMS</label></div>
                     <div class="form-group"><label><input type="checkbox" id="appActive" checked> التطبيق نشط</label></div>
                     <hr>
-                    <h3>إعدادات تفعيل الخدمات عبر SMS</h3>
-                    <div class="form-group">
-                        <label>اسم البنك كما يظهر في رسالة البنك</label>
-                        <input type="text" class="form-control" id="systemBankName" placeholder="مثال: الشرعي">
-                    </div>
-                    <div class="form-group">
-                        <label>اسم حساب النظام لدى البنك</label>
-                        <input type="text" class="form-control" id="systemBankAccountName" placeholder="اسم المستفيد">
-                    </div>
-                    <div class="form-group">
-                        <label>رقم مرسل رسائل البنك الموثوق</label>
-                        <input type="tel" class="form-control" id="systemBankSenderPhone" placeholder="رقم مرسل SMS للبنك">
-                    </div>
-                    <div class="form-group">
-                        <label>رقم هاتف المورد الذي يرسل نتيجة USSD ورصيد المورد</label>
-                        <input type="tel" class="form-control" id="activationProviderPhone" placeholder="رقم المورد الموثوق">
-                    </div>
-                    <div class="form-group">
-                        <label>رصيد المورد الحالي قبل أي محاولة تفعيل</label>
-                        <input type="number" min="0" step="0.01" class="form-control" id="activationProviderBalance" placeholder="مطلوب للسماح بإعادة محاولة آمنة">
-                    </div>
-                    <div class="form-group">
-                        <label>نص SMS للاستعلام عن رصيد المورد</label>
-                        <textarea class="form-control" id="supplierBalanceQuery" rows="2" placeholder="رسالة المورد للاستعلام عن رصيد النظام"></textarea>
-                    </div>
-                    <p class="text-muted">تُقبل الحوالة آلياً عند تطابق رقم مرسل البنك واسم البنك واسم العميل والمبلغ مع طلب واحد منتظر. لا يُستخدم رصيد حساب البنك كشرط مطابقة. ولن يُعاد أمر USSD إلا مرة واحدة بعد رد موثوق يثبت أن رصيد المورد لم يتغير.</p>
-                    <div class="form-group">
-                        <label>الخدمة المراد ضبط أمرها الكامل</label>
-                        <select class="form-control" id="smsServiceSelect" onchange="loadSelectedSmsCommand()"></select>
-                    </div>
-                    <div class="form-group">
-                        <label>أمر USSD الكامل (اكتب phone مكان رقم العميل، مثال: 300#*(phone)*130*)</label>
-                        <textarea class="form-control" id="fullActivationCommand" rows="2" dir="ltr" placeholder="300#*(phone)*130*"></textarea>
-                    </div>
-                    <button type="button" class="btn btn-secondary mt-1" onclick="saveSelectedSmsCommand()">حفظ أمر الخدمة</button>
                     <div class="form-group">
                         <label>الحد الأدنى للتنبيه (لتر)</label>
                         <input type="number" class="form-control" id="thresholdInput" value="1000">
@@ -1421,28 +1386,7 @@
                     <button type="button" class="btn btn-secondary mt-1" onclick="showAboutModal()">ℹ️ عن التطبيق</button>
                 </form>
             </div>
-            <div class="card">
-                <div class="card-title"><span class="icon">📶</span> شركات الاتصالات</div>
-                <p class="text-muted">رقم مركز الإرسال والبادئات التي تحدد الشركة من رقم العميل.</p>
-                <form onsubmit="saveTelecomProvider(event)">
-                    <input class="form-control" id="telecomName" required placeholder="اسم الشركة: يمن موبايل">
-                    <input class="form-control mt-1" id="telecomSender" required placeholder="رقم مركز USSD">
-                    <input class="form-control mt-1" id="telecomPrefixes" required placeholder="البادئات: 77,78">
-                    <button class="btn btn-primary mt-1" type="submit">حفظ شركة الاتصالات</button>
-                </form>
-                <div id="telecomProvidersList" class="mt-2"></div>
-            </div>
-            <div class="card">
-                <div class="card-title"><span class="icon">🏦</span> البنوك والصرافات والمحافظ</div>
-                <form onsubmit="savePaymentAccount(event)">
-                    <input class="form-control" id="paymentName" required placeholder="اسم البنك أو الصرافة أو المحفظة">
-                    <select class="form-control mt-1" id="paymentType"><option value="bank">بنك</option><option value="exchange">صرافة</option><option value="wallet">محفظة إلكترونية</option></select>
-                    <input class="form-control mt-1" id="paymentAccountNumber" required placeholder="رقم الحساب أو المحفظة">
-                    <input class="form-control mt-1" id="paymentSender" placeholder="رقم مرسل إشعارات التحويل">
-                    <button class="btn btn-primary mt-1" type="submit">حفظ حساب الدفع</button>
-                </form>
-                <div id="paymentAccountsList" class="mt-2"></div>
-            </div>
+
         </div>
 
         <!-- ============================================================
@@ -1662,7 +1606,7 @@
         </div>
     </div>
 
-    <div class="modal-overlay" id="telecomModal"><div class="modal"><div class="modal-header"><h2 class="modal-title">شركة اتصالات</h2><button class="modal-close" onclick="closeModal('telecomModal')">✕</button></div><div class="modal-body"><form onsubmit="saveTelecom(event)"><input type="hidden" id="telecomEditId" value="0"><div class="form-group"><label>اسم شركة الاتصالات *</label><input class="form-control" id="telecomName" required></div><div class="form-group"><label>الرقم الذي يرسل إليه أمر USSD</label><input class="form-control" id="telecomUssdPhone" type="tel"></div><div class="form-group"><label>بادئة الهاتف 1</label><input class="form-control" id="telecomPrefix1"></div><div class="form-group"><label>بادئة الهاتف 2</label><input class="form-control" id="telecomPrefix2"></div><div class="form-group"><label>بادئة الهاتف 3</label><input class="form-control" id="telecomPrefix3"></div><div class="form-group"><label>بادئة الهاتف 4</label><input class="form-control" id="telecomPrefix4"></div><div class="form-group"><label>رقم الشركة المرسل لنتيجة SMS/USSD ورصيد التطبيق</label><input class="form-control" id="telecomBalancePhone" type="tel"></div><button type="submit" class="btn btn-primary">💾 حفظ</button></form></div></div></div>
+    <div class="modal-overlay" id="telecomModal"><div class="modal"><div class="modal-header"><h2 class="modal-title">شركة اتصالات</h2><button class="modal-close" onclick="closeModal('telecomModal')">✕</button></div><div class="modal-body"><form onsubmit="saveTelecom(event)"><input type="hidden" id="telecomEditId" value="0"><div class="form-group"><label>اسم شركة الاتصالات *</label><input class="form-control" id="telecomName" name="name" required maxlength="120" autocomplete="organization"></div><div class="form-group"><label>الرقم الذي يرسل إليه أمر USSD</label><input class="form-control" id="telecomUssdPhone" type="tel"></div><div class="form-group"><label>بادئة الهاتف 1</label><input class="form-control" id="telecomPrefix1"></div><div class="form-group"><label>بادئة الهاتف 2</label><input class="form-control" id="telecomPrefix2"></div><div class="form-group"><label>بادئة الهاتف 3</label><input class="form-control" id="telecomPrefix3"></div><div class="form-group"><label>بادئة الهاتف 4</label><input class="form-control" id="telecomPrefix4"></div><div class="form-group"><label>رقم الشركة المرسل لنتيجة SMS/USSD ورصيد التطبيق</label><input class="form-control" id="telecomBalancePhone" type="tel"></div><button type="submit" class="btn btn-primary">💾 حفظ</button></form></div></div></div>
 
     <!-- SMS Detail Modal -->
     <div class="modal-overlay" id="smsDetailModal">
@@ -1809,12 +1753,6 @@
         }
 
         const persistentSmsSettings = {
-            systemBankName: 'system_bank_name',
-            systemBankAccountName: 'system_bank_account_name',
-            systemBankSenderPhone: 'system_bank_sender_phone',
-            activationProviderPhone: 'activation_provider_phone',
-            activationProviderBalance: 'activation_provider_balance',
-            supplierBalanceQuery: 'supplier_balance_query_sms',
             smsEnabled: 'sms_enabled',
             appActive: 'app_active'
         };
@@ -1830,41 +1768,6 @@
                     else element.value = value;
                 }
             });
-            loadSmsServiceCatalog();
-        }
-
-        function loadSmsServiceCatalog() {
-            if (!window.AndroidInterface || !window.AndroidInterface.getSmsServiceCatalog) return;
-            try {
-                smsServiceCatalog = JSON.parse(window.AndroidInterface.getSmsServiceCatalog() || '[]');
-                const select = document.getElementById('smsServiceSelect');
-                if (!select) return;
-                const previous = select.value;
-                select.innerHTML = smsServiceCatalog.map(s => `<option value="${String(s.service_code || '').replace(/"/g, '&quot;')}">${String(s.service_name_ar || s.service_name || s.service_code)} — ${String(s.service_code || '')}</option>`).join('');
-                if (previous) select.value = previous;
-                loadSelectedSmsCommand();
-            } catch (e) { console.warn('تعذر تحميل خدمات SMS', e); }
-        }
-
-        function loadSelectedSmsCommand() {
-            const select = document.getElementById('smsServiceSelect');
-            const input = document.getElementById('fullActivationCommand');
-            const item = smsServiceCatalog.find(s => s.service_code === select?.value);
-            if (input) input.value = item?.activation_command || '';
-        }
-
-        function saveSelectedSmsCommand() {
-            const select = document.getElementById('smsServiceSelect');
-            const command = document.getElementById('fullActivationCommand')?.value.trim() || '';
-            if (!window.AndroidInterface || !window.AndroidInterface.setServiceActivationTemplate) {
-                showToast('حفظ أوامر الخدمات يتطلب تشغيل التطبيق على Android', 'warning'); return;
-            }
-            if (!select?.value || !/\(\s*phone\s*\)|\{\{?\s*phone\s*}?\}|%phone%|\bphone\b/i.test(command)) {
-                showToast('يجب أن يتضمن الأمر الكامل موضع phone لاستبداله برقم العميل', 'warning'); return;
-            }
-            if (window.AndroidInterface.setServiceActivationTemplate(select.value, command)) {
-                showToast('تم حفظ أمر التفعيل الكامل', 'success'); loadSmsServiceCatalog();
-            } else showToast('تعذر حفظ الأمر؛ تحقق من صيغته', 'error');
         }
 
         function applySettings() {
@@ -1900,44 +1803,7 @@
                 }
             }
             applySettings();
-            showToast(persistentSaveFailed ? 'تعذر حفظ بعض إعدادات SMS' : 'تم حفظ الإعدادات', persistentSaveFailed ? 'warning' : 'success');
-        }
-
-        async function saveTelecomProvider(e) {
-            e.preventDefault();
-            const result = await apiCall('save_telecom_provider', {
-                name: document.getElementById('telecomName').value.trim(),
-                sender_number: document.getElementById('telecomSender').value.trim(),
-                prefixes: document.getElementById('telecomPrefixes').value.trim()
-            });
-            if (result.success) { showToast('تم حفظ شركة الاتصالات', 'success'); loadTelecomProviders(); }
-            else showToast(result.error || 'تعذر الحفظ', 'error');
-        }
-
-        async function loadTelecomProviders() {
-            const result = await apiCall('get_telecom_providers');
-            const list = document.getElementById('telecomProvidersList');
-            if (!list || !result.success) return;
-            list.innerHTML = (result.data || []).map(p => `<div class="list-item">${escapeHtml(p.name)} — ${escapeHtml(p.sender_number)} — ${escapeHtml(p.prefixes)}</div>`).join('');
-        }
-
-        async function savePaymentAccount(e) {
-            e.preventDefault();
-            const result = await apiCall('save_payment_account', {
-                name: document.getElementById('paymentName').value.trim(),
-                account_type: document.getElementById('paymentType').value,
-                account_number: document.getElementById('paymentAccountNumber').value.trim(),
-                sender_number: document.getElementById('paymentSender').value.trim()
-            });
-            if (result.success) { showToast('تم حفظ حساب الدفع', 'success'); loadPaymentAccounts(); }
-            else showToast(result.error || 'تعذر الحفظ', 'error');
-        }
-
-        async function loadPaymentAccounts() {
-            const result = await apiCall('get_payment_accounts');
-            const list = document.getElementById('paymentAccountsList');
-            if (!list || !result.success) return;
-            list.innerHTML = (result.data || []).map(p => `<div class="list-item">${escapeHtml(p.name)} — ${escapeHtml(p.account_type)} — ${escapeHtml(p.account_number)}</div>`).join('');
+            showToast(persistentSaveFailed ? 'تعذر حفظ حالة التطبيق' : 'تم حفظ الإعدادات', persistentSaveFailed ? 'warning' : 'success');
         }
 
         // ============================================================
@@ -2389,9 +2255,29 @@
             document.getElementById('telecomModal').classList.add('active');
         }
         async function saveTelecom(e) {
-            e.preventDefault(); const data={id:+document.getElementById('telecomEditId').value,name:document.getElementById('telecomName').value.trim(),ussd_phone:document.getElementById('telecomUssdPhone').value.trim(),balance_phone:document.getElementById('telecomBalancePhone').value.trim()};
-            for(let i=1;i<=4;i++) data['prefix'+i]=document.getElementById('telecomPrefix'+i).value.trim();
-            const result=await apiCall('save_telecom_company',data); if(result.success){closeModal('telecomModal');showToast(result.message,'success');await loadTelecoms();await loadTelecomOptions();}else showToast(result.error||'تعذر الحفظ','error');
+            e.preventDefault();
+            const form = e.currentTarget;
+            const name = String(new FormData(form).get('name') || '').trim();
+            if (!name) {
+                showToast('أدخل اسم شركة الاتصالات', 'warning');
+                form.querySelector('[name="name"]')?.focus();
+                return;
+            }
+            const value = (id) => form.querySelector(`#${id}`)?.value.trim() || '';
+            const data = {
+                id: Number(value('telecomEditId')) || 0,
+                name,
+                ussd_phone: value('telecomUssdPhone'),
+                balance_phone: value('telecomBalancePhone')
+            };
+            for (let i = 1; i <= 4; i++) data[`prefix${i}`] = value(`telecomPrefix${i}`);
+            const result = await apiCall('save_telecom_company', data);
+            if (result.success) {
+                closeModal('telecomModal');
+                showToast(result.message || 'تم حفظ شركة الاتصالات', 'success');
+                await loadTelecoms();
+                await loadTelecomOptions();
+            } else showToast(result.error || 'تعذر حفظ شركة الاتصالات', 'error');
         }
         async function deleteTelecom(id) { if(!confirm('حذف شركة الاتصالات؟')) return; const r=await apiCall('delete_telecom_company',{id}); if(r.success) await loadTelecoms(); else showToast(r.error||'تعذر الحذف','error'); }
 
@@ -2641,8 +2527,6 @@ loadServices();
 loadCustomers();
 loadSuppliers();
 loadSms();
-loadTelecomProviders();
-loadPaymentAccounts();
 
 // إغلاق المودالات بالنقر خارجها
 document.querySelectorAll('.modal-overlay').forEach(el => {

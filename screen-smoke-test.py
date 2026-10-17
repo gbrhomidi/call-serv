@@ -32,24 +32,27 @@ checks = {
         and 'applicationId = "com.aistudio.telecomactivation"' in gradle_build
         and 'android:label="@string/app_name"' in manifest
     ),
-    "bank name/account/sender and provider settings are present without an expected-bank-balance field": all(
-        f'id="{element}"' in html
+    "legacy SMS bank/provider and USSD controls are removed from settings": all(
+        f'id="{element}"' not in html
         for element in (
-            "systemBankName",
-            "systemBankAccountName",
-            "systemBankSenderPhone",
-            "activationProviderPhone",
-            "activationProviderBalance",
-            "supplierBalanceQuery",
-            "smsServiceSelect",
-            "fullActivationCommand",
+            "systemBankName", "systemBankAccountName", "systemBankSenderPhone",
+            "activationProviderPhone", "activationProviderBalance", "supplierBalanceQuery",
+            "smsServiceSelect", "fullActivationCommand",
         )
-    ) and "systemBankExpectedBalance" not in html
+    ) and "إعدادات تفعيل الخدمات عبر SMS" not in html
+    and "تُقبل الحوالة آلياً عند تطابق" not in html
+    and 'id="serviceActivationCommand"' in html
     and "system_bank_expected_balance" not in processor
     and "system_bank_expected_balance" not in store,
-    "the settings screen loads/saves the service command through the Android bridge": all(
-        token in html for token in ("getSmsServiceCatalog", "setServiceActivationTemplate", "saveSelectedSmsCommand")
-    ) and all(token in activity for token in ("fun getSmsServiceCatalog()", "fun setServiceActivationTemplate(")),
+    "telecom company save is scoped to its own form and the name ID is unique": (
+        html.count('id="telecomName"') == 1
+        and "new FormData(form).get('name')" in html
+        and 'form.querySelector(`#${id}`)' in html
+        and "save_telecom_company" in web_api
+    ),
+    "service form retains the full USSD template editor": all(
+        token in html for token in ('id="serviceActivationCommand"', "async function saveService", "activation_command:")
+    ) and '"activation_command"' in web_api,
     "incoming SMS receiver is registered and protected by Android SMS permissions": all(
         token in manifest for token in (
             "android.permission.RECEIVE_SMS",
