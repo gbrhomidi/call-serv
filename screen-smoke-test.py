@@ -60,12 +60,12 @@ checks = {
         )
     ) and "goAsync()" in receiver,
     "a strictly matched bank payment dispatches the authorized request to the USSD path": (
-        "store.acceptBankPayment(sender, bankName, notice)" in processor
+        "store.acceptBankPayment(sender, bankName, notice," in processor
         and 'dispatchUssd(context, request.getLong("id"), store)' in processor
         and "sendUssdRequest(command" in processor
     ),
     "the full USSD template substitutes the customer phone and rejects unsafe characters": all(
-        token in analysis for token in ("fun buildUssdCommand(", "normalizePhone(phone)", "marker.replace(template)")
+        token in analysis for token in ("fun buildUssdCommand(", "normalizePhone(phone)", "marker.replaceFirst(template")
     ),
     "activation orders and bank reconciliation persist in SQLite": all(
         token in store for token in ("sms_activation_requests", "fun acceptBankPayment(", "status='awaiting_payment'")

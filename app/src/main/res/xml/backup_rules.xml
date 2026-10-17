@@ -1,14 +1,3 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Whitelist-only Android Auto Backup configuration.
-  The application currently sets android:allowBackup="false". If that policy is
-  intentionally changed later, these are the only paths that may be included;
-  database, credentials, logs, and other files remain outside the whitelist.
--->
-<full-backup-content>
-    <include domain="sharedpref" path="ui_settings.xml" />
-    <include domain="sharedpref" path="theme_prefs.xml" />
-    <include domain="sharedpref" path="locale_prefs.xml" />
-    <include domain="file" path="custom_themes/" />
-    <include domain="file" path="ui_config.json" />
-</full-backup-content>
+<!-- النسخ الاحتياطي للتطبيق معطل عمدًا؛ النسخ اليدوي يتم عبر BackupWorker. -->
+<full-backup-content />

@@ -58,7 +58,7 @@ class BackupWorker(
             }
 
             // ✅ 2. إنشاء DatabaseHelper مع try-with-resources
-            val db = DatabaseHelper(applicationContext)
+            val db = DatabaseHelper.getInstance(applicationContext)
             try {
                 // ✅ 3. تصدير البيانات
                 val exportedData = db.exportAllData()
