@@ -154,7 +154,7 @@ class SmsActivationStoreTest {
         val id = first.getLong("id")
         assertTrue(store.markDispatching(id, 1))
         assertTrue(store.markReconciliation(id))
-        assertNotNull(store.prepareSafeRetry("777000001", 50_000))
+        assertNotNull(store.prepareSafeRetry("777000001", 50_000, providerConfirmedNotExecuted = true))
         assertEquals("retry_ready", store.getRequest(id)!!.getString("status"))
 
         val second = store.createRequest(customer, service(price = 25.0), customer.getString("phone1"))
@@ -179,13 +179,31 @@ class SmsActivationStoreTest {
     }
 
     @Test
+    fun `provider failure remains financially uncertain and late success reconciles exactly once`() {
+        val customer = customer(name = "نتيجة مورد متأخرة", phone = "777444557", allowCredit = true, creditLimit = 100.0)
+        val request = store.createRequest(customer, service(price = 8.0), customer.getString("phone1"))
+        val id = request.getLong("id")
+        assertTrue(store.markDispatching(id, 1))
+
+        SmsCommandProcessor.process(context, "777000001", "تعذر تفعيل الخدمة للرقم 777444557")
+        assertEquals("uncertain", store.getRequest(id)!!.getString("status"))
+        assertEquals(0L, count("SELECT count(*) FROM activations"))
+        assertEquals(0.0, helper.getCustomerById(customer.getInt("id"))!!.getDouble("current_balance"), 0.001)
+
+        SmsCommandProcessor.process(context, "777000001", "تم تفعيل الخدمة للرقم 777444557 بنجاح")
+        assertEquals("success", store.getRequest(id)!!.getString("status"))
+        assertEquals(1L, count("SELECT count(*) FROM activations WHERE sms_request_id=$id"))
+        assertEquals(8.0, helper.getCustomerById(customer.getInt("id"))!!.getDouble("current_balance"), 0.001)
+    }
+
+    @Test
     fun `provider success arriving in retry-ready state prevents a duplicate second USSD attempt`() {
         val customer = customer(name = "تأكيد وقت الإعادة", phone = "777444556", allowCredit = true, creditLimit = 100.0)
         val request = store.createRequest(customer, service(price = 8.0), customer.getString("phone1"))
         val id = request.getLong("id")
         assertTrue(store.markDispatching(id, 1))
         assertTrue(store.markReconciliation(id))
-        val retryReady = store.prepareSafeRetry("777000001", 50_000)
+        val retryReady = store.prepareSafeRetry("777000001", 50_000, providerConfirmedNotExecuted = true)
         assertNotNull(retryReady)
         assertEquals("retry_ready", store.getRequest(id)!!.getString("status"))
 
@@ -220,21 +238,50 @@ class SmsActivationStoreTest {
     }
 
     @Test
-    fun `automatic retry is allowed once only when supplier balance is unchanged`() {
+    fun `unchanged supplier balance alone is insufficient to authorize retry`() {
         val customer = customer(name = "إعادة آمنة", phone = "777666777", allowCredit = true, creditLimit = 100.0)
         val request = store.createRequest(customer, service(price = 9.0), customer.getString("phone1"))
         val id = request.getLong("id")
         assertTrue(store.markDispatching(id, 1))
         assertTrue(store.markReconciliation(id))
-        val retry = store.prepareSafeRetry("777000001", 50_000)
-        assertNotNull(retry)
-        assertEquals("retry_ready", retry!!.getString("status"))
-        assertEquals(2, retry.getInt("attempt_count"))
-
-        assertTrue(store.markDispatching(id, 2))
-        assertTrue(store.markReconciliation(id))
         assertNull(store.prepareSafeRetry("777000001", 50_000))
         assertEquals("uncertain", store.getRequest(id)!!.getString("status"))
+        assertEquals(1, store.getRequest(id)!!.getInt("attempt_count"))
+    }
+
+    @Test
+    fun `provider explicit non execution and unchanged balance authorize only one retry`() {
+        val customer = customer(name = "تأكيد عدم التنفيذ", phone = "777666778", allowCredit = true, creditLimit = 100.0)
+        val request = store.createRequest(customer, service(price = 9.0), customer.getString("phone1"))
+        val id = request.getLong("id")
+        assertTrue(store.markDispatching(id, 1))
+        assertFalse(store.markDispatching(id, 1))
+        assertTrue(store.markReconciliation(id))
+
+        val retry = store.prepareSafeRetry("777000001", 50_000, providerConfirmedNotExecuted = true)
+        assertNotNull(retry)
+        assertEquals("retry_ready", retry!!.getString("status"))
+        assertTrue(store.markDispatching(id, 2))
+        assertFalse(store.markDispatching(id, 2))
+        assertEquals(2L, count("SELECT count(*) FROM sms_activation_events WHERE event_type='ussd_dispatch_claimed'"))
+        assertEquals(1L, count("SELECT count(*) FROM sms_activation_events WHERE event_type='retry_authorized'"))
+    }
+
+    @Test
+    fun `replayed activation SMS idempotency key returns same request even after completion`() {
+        val customer = customer(name = "إعادة بث الطلب", phone = "777666779", allowCredit = true, creditLimit = 100.0)
+        val service = service(price = 9.0)
+        val key = "smsv1_${"a".repeat(64)}"
+        val first = store.createRequest(customer, service, customer.getString("phone1"), key)
+        val id = first.getLong("id")
+        assertNotNull(store.completeSuccess(id, "تم التفعيل بنجاح"))
+
+        val replay = store.createRequest(customer, service, customer.getString("phone1"), key)
+        assertTrue(replay.optBoolean("duplicate"))
+        assertTrue(replay.optBoolean("idempotent_replay"))
+        assertEquals(id, replay.getLong("id"))
+        assertEquals(1L, count("SELECT count(*) FROM activations WHERE sms_request_id=$id"))
+        assertEquals(9.0, helper.getCustomerById(customer.getInt("id"))!!.getDouble("current_balance"), 0.001)
     }
 
     @Test
@@ -302,6 +349,9 @@ class SmsActivationStoreTest {
     @Test
     fun `incoming message claiming is idempotent for the same sender body and timestamp`() {
         val store = SmsActivationStore(context)
+        val firstKey = smsInboundIdempotencyKey("+967777123456", "تفعيل باقة", 123_456L)
+        assertEquals(firstKey, smsInboundIdempotencyKey("777123456", "تفعيل باقة", 123_456L))
+        assertTrue(firstKey != smsInboundIdempotencyKey("777123456", "تفعيل باقة", 123_457L))
         assertTrue(store.claimIncoming("+967777123456", "تفعيل باقة", 123_456L))
         assertFalse(store.claimIncoming("777123456", "تفعيل باقة", 123_456L))
         assertTrue(store.claimIncoming("777123456", "تفعيل باقة", 123_457L))

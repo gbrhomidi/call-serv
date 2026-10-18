@@ -20,6 +20,10 @@ internal object SmsTextAnalysis {
         "(فشل|غير\\s*(كاف|ناجح|مفعل)|لم\\s*(يتم|ينجح|تنجح)|لا\\s*(يوجد\\s*)?(نجاح|تفعيل)|ما\\s*تم\\s*التفعيل|تعذر|مرفوض|ملغي|failed|failure|unsuccessful|not\\s+(a\\s+)?(success(ful)?|activated|completed|approved)|insufficient|declined|rejected|error)",
         RegexOption.IGNORE_CASE
     )
+    private val providerNotExecutedPattern = Regex(
+        "(لم\\s+(يتم|تتم)\\s+(تنفيذ|معالجه)\\s+(الطلب|العمليه|الخدمه)|(?:الطلب|العمليه)\\s+لم\\s+(ينفذ|تعالج)|(?:request|transaction|order)\\s+(was\\s+)?not\\s+(executed|processed))",
+        RegexOption.IGNORE_CASE
+    )
     private val amountTokenPattern = Regex("(?<![0-9,٬.٫\\-])(?:[0-9]{1,3}(?:[,٬][0-9]{3})+|[0-9]+)(?:[.٫][0-9]+)?(?![0-9,٬.٫\\-])")
 
     fun normalizeDigits(value: String): String = buildString(value.length) {
@@ -104,6 +108,10 @@ internal object SmsTextAnalysis {
     }
 
     fun isFailureMessage(body: String): Boolean = failurePattern.containsMatchIn(normalizeDigits(body))
+
+    /** Explicit supplier evidence; generic failure wording or unchanged balances are insufficient. */
+    fun providerExplicitlyConfirmedNotExecuted(body: String): Boolean =
+        providerNotExecutedPattern.containsMatchIn(normalize(body))
 
     /** Returns exactly one best match; no service is selected when the top score is tied. */
     fun findService(message: String, services: JSONArray): JSONObject? {

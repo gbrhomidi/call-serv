@@ -19,16 +19,43 @@ internal class SmsActivationStore(context: Context) {
                 amount_cents INTEGER NOT NULL, payment_method TEXT NOT NULL, status TEXT NOT NULL,
                 activation_command TEXT NOT NULL, provider_phone TEXT NOT NULL DEFAULT '',
                 provider_balance_before_cents INTEGER, attempt_count INTEGER NOT NULL DEFAULT 0,
+                idempotency_key TEXT NOT NULL DEFAULT '', dispatched_attempt INTEGER NOT NULL DEFAULT 0,
                 bank_reference TEXT NOT NULL DEFAULT '', activation_id INTEGER,
                 status_message TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
             )""".trimIndent()
         )
+        ensureColumn("sms_activation_requests", "idempotency_key", "TEXT NOT NULL DEFAULT ''")
+        ensureColumn("sms_activation_requests", "dispatched_attempt", "INTEGER NOT NULL DEFAULT 0")
+        ensureColumn("activations", "sms_request_id", "INTEGER")
+        ensureColumn("activations", "idempotency_key", "TEXT")
+        db.execSQL("UPDATE sms_activation_requests SET idempotency_key='legacy-request-' || id WHERE idempotency_key=''")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_sms_activation_idempotency ON sms_activation_requests(idempotency_key)")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_activations_sms_request ON activations(sms_request_id) WHERE sms_request_id IS NOT NULL")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_activations_idempotency ON activations(idempotency_key) WHERE idempotency_key IS NOT NULL")
+        db.execSQL("""CREATE TABLE IF NOT EXISTS sms_activation_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, request_id INTEGER NOT NULL,
+            idempotency_key TEXT NOT NULL, event_type TEXT NOT NULL, attempt INTEGER NOT NULL DEFAULT 0,
+            detail TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL,
+            UNIQUE(idempotency_key,event_type,attempt))""")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_sms_activation_status_provider ON sms_activation_requests(status, provider_phone)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_sms_activation_customer_service ON sms_activation_requests(customer_id, service_id, created_at)")
     }
 
+    private fun ensureColumn(table: String, column: String, definition: String) {
+        val exists = db.rawQuery("PRAGMA table_info($table)", null).use { cursor ->
+            val index = cursor.getColumnIndex("name")
+            index >= 0 && generateSequence { if (cursor.moveToNext()) cursor.getString(index) else null }.any { it == column }
+        }
+        if (!exists) db.execSQL("ALTER TABLE $table ADD COLUMN $column $definition")
+    }
+
     /** Creates an order, applying credit policy and reserving credit atomically. */
-    fun createRequest(customer: JSONObject, service: JSONObject, phone: String): JSONObject {
+    fun createRequest(
+        customer: JSONObject,
+        service: JSONObject,
+        phone: String,
+        idempotencyKey: String = "smsv1_${java.util.UUID.randomUUID()}"
+    ): JSONObject {
         val customerId = customer.optInt("id")
         val serviceId = service.optInt("id")
         val amountCents = decimalToCents(service.optDouble("price")) ?: 0L
@@ -41,12 +68,22 @@ internal class SmsActivationStore(context: Context) {
         val providerPhone = providerPhone(telecom)
         val now = System.currentTimeMillis()
         val result = JSONObject()
-        if (customerId <= 0 || serviceId <= 0 || amountCents <= 0) return result.put("error", "بيانات الطلب غير صالحة")
+        if (customerId <= 0 || serviceId <= 0 || amountCents <= 0 || !idempotencyKey.matches(Regex("[A-Za-z0-9_-]{16,100}"))) return result.put("error", "بيانات الطلب أو مفتاح منع التكرار غير صالح")
         if (normalizedPhone.length < 7 || SmsTextAnalysis.buildUssdCommand(command, normalizedPhone) == null) {
             return result.put("error", "قالب أمر التفعيل أو رقم العميل غير مكتمل؛ لم يُنشأ طلب")
         }
         db.beginTransaction()
         try {
+            db.rawQuery(
+                "SELECT * FROM sms_activation_requests WHERE idempotency_key=? LIMIT 1",
+                arrayOf(idempotencyKey)
+            ).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val existing = cursorToJson(cursor).put("duplicate", true).put("idempotent_replay", true)
+                    db.setTransactionSuccessful()
+                    return existing
+                }
+            }
             db.rawQuery(
                 "SELECT * FROM sms_activation_requests WHERE customer_id=? AND service_id=? AND (status IN ('pending_provider','reconciling','retry_ready','uncertain') OR (status='awaiting_payment' AND created_at>?)) ORDER BY created_at DESC LIMIT 1",
                 arrayOf(customerId.toString(), serviceId.toString(), (now - 24L * 60 * 60 * 1000).toString())
@@ -88,6 +125,7 @@ internal class SmsActivationStore(context: Context) {
                 put("payment_method", paymentMethod)
                 put("status", status)
                 put("activation_command", command)
+                put("idempotency_key", idempotencyKey)
                 put("provider_phone", SmsTextAnalysis.normalizePhone(providerPhone))
                 if (providerBalance != null) put("provider_balance_before_cents", providerBalance)
                 put("attempt_count", if (isCredit) 1 else 0)
@@ -95,12 +133,14 @@ internal class SmsActivationStore(context: Context) {
                 put("updated_at", now)
             }
             val id = db.insertOrThrow("sms_activation_requests", null, values)
+            appendEvent(id, idempotencyKey, "request_created", 0, "payment_method=$paymentMethod;amount_cents=$amountCents")
             result.put("id", id).put("customer_id", customerId).put("service_id", serviceId)
                 .put("customer_phone", normalizedPhone)
                 .put("customer_name", customer.optString("full_name", ""))
                 .put("service_name", service.optString("service_name_ar", service.optString("service_name", "الخدمة")))
                 .put("amount_cents", amountCents).put("payment_method", paymentMethod)
                 .put("status", status).put("activation_command", command)
+                .put("idempotency_key", idempotencyKey)
                 .put("provider_phone", SmsTextAnalysis.normalizePhone(providerPhone))
                 .put("attempt_count", if (isCredit) 1 else 0).put("duplicate", false)
             db.setTransactionSuccessful()
@@ -146,10 +186,11 @@ internal class SmsActivationStore(context: Context) {
             val updated = ContentValues().apply {
                 put("status", "pending_provider")
                 put("payment_method", "bank")
-                put("bank_reference", "bank-sms:$now")
+                put("bank_reference", "bank-request:$id")
                 put("updated_at", now)
             }
             if (db.update("sms_activation_requests", updated, "id=? AND status='awaiting_payment'", arrayOf(id.toString())) != 1) return null
+            appendEvent(id, request.optString("idempotency_key"), "bank_payment_matched", 0, "amount_cents=${notice.amountCents}")
             request.put("status", "pending_provider").put("payment_method", "bank")
             db.setTransactionSuccessful()
             return request
@@ -161,31 +202,64 @@ internal class SmsActivationStore(context: Context) {
     ).use { if (it.moveToFirst()) cursorToJson(it) else null }
 
     fun markDispatching(id: Long, attempt: Int): Boolean {
+        if (attempt !in 1..2) return false
         val values = ContentValues().apply {
             put("status", "pending_provider")
             put("attempt_count", attempt)
+            put("dispatched_attempt", attempt)
             put("updated_at", System.currentTimeMillis())
         }
-        return db.update("sms_activation_requests", values, "id=? AND status IN ('pending_provider','retry_ready')", arrayOf(id.toString())) == 1
+        db.beginTransaction()
+        try {
+            val updated = db.update(
+                "sms_activation_requests", values,
+                "id=? AND status IN ('pending_provider','retry_ready') AND dispatched_attempt=?",
+                arrayOf(id.toString(), (attempt - 1).toString())
+            ) == 1
+            if (!updated) return false
+            val request = getRequest(id) ?: return false
+            appendEvent(id, request.optString("idempotency_key"), "ussd_dispatch_claimed", attempt, "")
+            db.setTransactionSuccessful()
+            return true
+        } finally { db.endTransaction() }
     }
 
     fun markReconciliation(id: Long): Boolean {
-        val values = ContentValues().apply { put("status", "reconciling"); put("updated_at", System.currentTimeMillis()) }
-        return db.update("sms_activation_requests", values, "id=? AND status='pending_provider'", arrayOf(id.toString())) == 1
+        db.beginTransaction()
+        try {
+            val values = ContentValues().apply { put("status", "reconciling"); put("updated_at", System.currentTimeMillis()) }
+            if (db.update("sms_activation_requests", values, "id=? AND status='pending_provider'", arrayOf(id.toString())) != 1) return false
+            val request = getRequest(id) ?: return false
+            appendEvent(id, request.optString("idempotency_key"), "reconciliation_started", request.optInt("attempt_count"), "")
+            db.setTransactionSuccessful()
+            return true
+        } finally { db.endTransaction() }
     }
 
     fun markUncertain(id: Long, reason: String): Boolean = updateStatus(id, "uncertain", reason)
     fun markFailed(id: Long, reason: String): Boolean = updateStatus(id, "failed", reason)
 
     private fun updateStatus(id: Long, status: String, reason: String): Boolean {
-        val values = ContentValues().apply { put("status", status); put("status_message", reason.take(300)); put("updated_at", System.currentTimeMillis()) }
-        return db.update("sms_activation_requests", values, "id=? AND status NOT IN ('success','failed')", arrayOf(id.toString())) == 1
+        db.beginTransaction()
+        try {
+            val values = ContentValues().apply { put("status", status); put("status_message", reason.take(300)); put("updated_at", System.currentTimeMillis()) }
+            if (db.update("sms_activation_requests", values, "id=? AND status NOT IN ('success','failed')", arrayOf(id.toString())) != 1) return false
+            val request = getRequest(id) ?: return false
+            appendEvent(id, request.optString("idempotency_key"), "status_$status", request.optInt("attempt_count"), reason.take(200))
+            db.setTransactionSuccessful()
+            return true
+        } finally { db.endTransaction() }
+    }
+
+    private fun appendEvent(requestId: Long, key: String, type: String, attempt: Int, detail: String) {
+        db.execSQL(
+            "INSERT OR IGNORE INTO sms_activation_events(request_id,idempotency_key,event_type,attempt,detail,created_at) VALUES(?,?,?,?,?,?)",
+            arrayOf(requestId, key, type, attempt, detail.take(200), System.currentTimeMillis())
+        )
     }
 
     fun claimIncoming(phone: String, message: String, receivedAt: Long): Boolean {
-        val digest = java.security.MessageDigest.getInstance("SHA-256")
-            .digest("${SmsTextAnalysis.normalizePhone(phone)}|${SmsTextAnalysis.normalize(message)}|$receivedAt".toByteArray())
-            .joinToString("") { "%02x".format(it) }
+        val digest = smsInboundIdempotencyKey(phone, message, receivedAt).removePrefix("smsv1_")
         val values = ContentValues().apply {
             put("message_hash", digest)
             put("phone", SmsTextAnalysis.normalizePhone(phone))
@@ -248,20 +322,25 @@ internal class SmsActivationStore(context: Context) {
         return rows.singleOrNull()
     }
 
-    /** A second USSD attempt is permitted once only, and only if queried balance is unchanged. */
-    fun prepareSafeRetry(sender: String, newBalanceCents: Long): JSONObject? {
+    /** Balance equality alone is not proof of non-execution; require trusted explicit provider evidence. */
+    fun prepareSafeRetry(sender: String, newBalanceCents: Long, providerConfirmedNotExecuted: Boolean = false): JSONObject? {
         val request = findUniqueProviderRequest(sender) ?: return null
         if (request.optString("status") != "reconciling") return null
         val attempt = request.optInt("attempt_count")
         val before = if (request.has("provider_balance_before_cents") && !request.isNull("provider_balance_before_cents")) request.optLong("provider_balance_before_cents") else -1L
-        if (attempt != 1 || before < 0 || newBalanceCents != before) {
-            markUncertain(request.getLong("id"), "رصيد المورد لم يثبت عدم الخصم؛ لم تتم إعادة المحاولة")
+        if (!providerConfirmedNotExecuted || attempt != 1 || before < 0 || newBalanceCents != before) {
+            markUncertain(request.getLong("id"), "لم يثبت المورد صراحةً عدم تنفيذ العملية؛ لم تتم إعادة المحاولة")
             return null
         }
-        val values = ContentValues().apply { put("status", "retry_ready"); put("attempt_count", 2); put("updated_at", System.currentTimeMillis()) }
-        if (db.update("sms_activation_requests", values, "id=? AND status='reconciling' AND attempt_count=1", arrayOf(request.getLong("id").toString())) != 1) return null
-        request.put("status", "retry_ready").put("attempt_count", 2)
-        return request
+        db.beginTransaction()
+        try {
+            val values = ContentValues().apply { put("status", "retry_ready"); put("attempt_count", 2); put("updated_at", System.currentTimeMillis()) }
+            if (db.update("sms_activation_requests", values, "id=? AND status='reconciling' AND attempt_count=1 AND dispatched_attempt=1", arrayOf(request.getLong("id").toString())) != 1) return null
+            appendEvent(request.getLong("id"), request.optString("idempotency_key"), "retry_authorized", 2, "provider_confirmed_not_executed; balance_unchanged")
+            request.put("status", "retry_ready").put("attempt_count", 2)
+            db.setTransactionSuccessful()
+            return request
+        } finally { db.endTransaction() }
     }
 
     /** Creates a single activation ledger entry and posts credit only after provider success. */
@@ -281,6 +360,8 @@ internal class SmsActivationStore(context: Context) {
                 put("amount", amount)
                 put("payment_method", request.optString("payment_method"))
                 put("activation_command", request.optString("activation_command"))
+                put("sms_request_id", requestId)
+                put("idempotency_key", request.optString("idempotency_key"))
                 put("status", "success")
                 put("status_message", providerMessage.take(300))
                 put("activated_at", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date()))
@@ -297,7 +378,8 @@ internal class SmsActivationStore(context: Context) {
                 put("status", "success"); put("activation_id", activationId)
                 put("status_message", providerMessage.take(300)); put("updated_at", System.currentTimeMillis())
             }
-            db.update("sms_activation_requests", values, "id=?", arrayOf(requestId.toString()))
+            if (db.update("sms_activation_requests", values, "id=? AND status IN ('pending_provider','reconciling','retry_ready','uncertain')", arrayOf(requestId.toString())) != 1) return null
+            appendEvent(requestId, request.optString("idempotency_key"), "provider_activation_confirmed", request.optInt("attempt_count"), "")
             request.put("status", "success").put("activation_id", activationId)
             db.setTransactionSuccessful()
             return request
@@ -321,6 +403,14 @@ internal class SmsActivationStore(context: Context) {
         else java.math.BigDecimal.valueOf(value).movePointRight(2)
             .setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()
     } catch (_: Exception) { null }
+}
+
+/** Stable across Android SMS broadcast redelivery; different received SMS events remain distinct. */
+internal fun smsInboundIdempotencyKey(phone: String, message: String, receivedAt: Long): String {
+    val digest = java.security.MessageDigest.getInstance("SHA-256")
+        .digest("${SmsTextAnalysis.normalizePhone(phone)}|${SmsTextAnalysis.normalize(message)}|$receivedAt".toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
+    return "smsv1_$digest"
 }
 
 private object BigCents {

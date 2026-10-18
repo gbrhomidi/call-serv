@@ -23,7 +23,7 @@ internal object SmsCommandProcessor {
     private const val TAG = "SmsCommandProcessor"
     private const val MAX_REPLY_PARTS = 4
 
-    fun process(context: Context, sender: String, body: String) {
+    fun process(context: Context, sender: String, body: String, inboundIdempotencyKey: String? = null) {
         val helper = DatabaseHelper.getInstance(context)
         val store = SmsActivationStore(context)
         val normalizedSender = SmsTextAnalysis.normalizePhone(sender)
@@ -101,7 +101,10 @@ internal object SmsCommandProcessor {
             return
         }
 
-        val request = store.createRequest(customer, requestedService, sender)
+        val request = store.createRequest(
+            customer, requestedService, sender,
+            inboundIdempotencyKey ?: "smsv1_${java.util.UUID.randomUUID()}"
+        )
         if (request.has("error")) {
             helper.logSms(sender, body, "activation_request", "rejected: ${request.optString("error")}")
             val reason = request.optString("error").ifBlank { "بيانات الخدمة أو إعدادات التفعيل غير مكتملة" }
@@ -156,10 +159,36 @@ internal object SmsCommandProcessor {
             return
         }
         val requestId = request.optLong("id")
+        val explicitNonExecution = SmsTextAnalysis.providerExplicitlyConfirmedNotExecuted(body)
+        if (request.optString("status") == "reconciling" && explicitNonExecution) {
+            val balance = extractLastBalance(body)
+            if (balance == null) {
+                store.markUncertain(requestId, "أكد المورد عدم التنفيذ لكنه لم يرسل رصيداً قابلاً للمطابقة")
+                reply(context, helper, request.optString("customer_phone"), "أكد المورد عدم تنفيذ طلب ${request.optString("service_name")}، لكن تعذر التحقق من الرصيد قبل أي إعادة. أوقفنا المحاولة تلقائياً؛ تواصل مع الدعم للمراجعة.")
+                helper.logSms(sender, body, "provider_reconciliation", "explicit non-execution without comparable balance")
+                return
+            }
+            val retry = store.prepareSafeRetry(sender, balance, providerConfirmedNotExecuted = true)
+            if (retry != null) {
+                helper.setSetting("activation_provider_balance", formatMoney(balance / 100.0))
+                dispatchUssd(context, retry.getLong("id"), store)
+                helper.logSms(sender, body, "provider_reconciliation", "explicit non-execution and unchanged balance; one retry dispatched")
+            } else {
+                reply(context, helper, request.optString("customer_phone"), "تعذر إثبات شروط إعادة طلب ${request.optString("service_name")} بأمان؛ أوقفنا أي محاولة إضافية لتجنب الخصم المزدوج. تواصل مع الدعم.")
+                helper.logSms(sender, body, "provider_reconciliation", "retry refused; evidence or baseline mismatch")
+            }
+            return
+        }
         if (SmsTextAnalysis.isFailureMessage(body)) {
             Log.w(TAG, "Provider reported activation failure request=$requestId")
-            activationFailure(context, helper, store, request, body, "أفاد المورد بفشل عملية التفعيل")
-            helper.logSms(sender, body, "provider_notice", "activation failure reported")
+            store.markUncertain(requestId, "أفاد المورد بفشل التفعيل لكن لم يثبت عدم الخصم نهائياً")
+            val message = if (request.optString("payment_method") == "bank") {
+                "أفاد المورد بتعذر تفعيل ${request.optString("service_name")}، لكن أثر العملية المالي لم يُحسم بعد. لا تعِد التحويل أو الطلب؛ أوقفنا الإعادة الآلية وأحلنا الحالة للمراجعة."
+            } else {
+                "أفاد المورد بتعذر تفعيل ${request.optString("service_name")}، لكن نتيجة الخصم لم تُحسم بعد. لم نضف مبلغاً إلى رصيدك الآجل ولم نكرر الطلب؛ تواصل مع الدعم لمراجعة حالة المورد."
+            }
+            reply(context, helper, request.optString("customer_phone"), message)
+            helper.logSms(sender, body, "provider_notice", "reported failure; financial outcome unresolved")
             return
         }
         if (SmsTextAnalysis.isSuccessMessage(body)) {
@@ -172,7 +201,8 @@ internal object SmsCommandProcessor {
 
         val balance = extractLastBalance(body)
         if (balance != null && request.optString("status") == "reconciling") {
-            val retry = store.prepareSafeRetry(sender, balance)
+            val explicitlyNotExecuted = SmsTextAnalysis.providerExplicitlyConfirmedNotExecuted(body)
+            val retry = store.prepareSafeRetry(sender, balance, explicitlyNotExecuted)
             if (retry != null) {
                 helper.setSetting("activation_provider_balance", formatMoney(balance / 100.0))
                 dispatchUssd(context, retry.getLong("id"), store)

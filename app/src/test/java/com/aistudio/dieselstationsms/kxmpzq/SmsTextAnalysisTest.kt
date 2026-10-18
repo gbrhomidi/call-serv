@@ -189,4 +189,12 @@ class SmsTextAnalysisTest {
         assertTrue(SmsTextAnalysis.isFailureMessage("تعذر تفعيل باقة ماكس300: الرصيد غير كاف"))
         assertFalse(SmsTextAnalysis.isSuccessMessage("طلب تفعيل باقة ماكس300 قيد المعالجة"))
     }
+
+    @Test
+    fun providerNonExecutionRequiresExplicitWordingAndIsNotInferredFromBalance() {
+        assertTrue(SmsTextAnalysis.providerExplicitlyConfirmedNotExecuted("لم يتم تنفيذ الطلب، ولم يتم خصم الرصيد"))
+        assertTrue(SmsTextAnalysis.providerExplicitlyConfirmedNotExecuted("Transaction was not executed"))
+        assertFalse(SmsTextAnalysis.providerExplicitlyConfirmedNotExecuted("رصيد المورد 50000"))
+        assertFalse(SmsTextAnalysis.providerExplicitlyConfirmedNotExecuted("تعذر التفعيل"))
+    }
 }

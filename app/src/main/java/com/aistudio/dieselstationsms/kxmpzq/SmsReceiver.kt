@@ -34,7 +34,8 @@ class SmsReceiver : BroadcastReceiver() {
                     }
                     Log.i(TAG, "Inbound SMS accepted for processing")
                     try {
-                        SmsCommandProcessor.process(context.applicationContext, sender, body)
+                        val idempotencyKey = smsInboundIdempotencyKey(sender, body, receivedAt)
+                        SmsCommandProcessor.process(context.applicationContext, sender, body, idempotencyKey)
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to process inbound SMS error=${e.javaClass.simpleName}")
                         DatabaseHelper.getInstance(context.applicationContext)
