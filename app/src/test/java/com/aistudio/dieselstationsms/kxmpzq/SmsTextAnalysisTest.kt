@@ -74,6 +74,36 @@ class SmsTextAnalysisTest {
     }
 
     @Test
+    fun directUssdReplacementNormalizesArabicIndicAndInternationalCustomerPhones() {
+        val command = SmsTextAnalysis.buildUssdCommand(
+            "*123*(phone)*300#",
+            "+٩٦٧ ٧٧٧ ٠٠٠ ٠٠١"
+        )
+        assertEquals("*123*777000001*300#", command)
+        assertTrue(command!!.none { it == '(' || it == ')' || it == '{' || it == '}' })
+    }
+
+    @Test
+    fun directUssdReplacementReplacesEveryCustomerPhonePlaceholder() {
+        val command = SmsTextAnalysis.buildUssdCommand(
+            "*700*(phone)*{phone}*%phone%#",
+            "777123456"
+        )
+        assertEquals("*700*777123456*777123456*777123456#", command)
+        assertFalse(command!!.contains("phone", ignoreCase = true))
+    }
+
+    @Test
+    fun directUssdReplacementRejectsMissingOrInvalidCustomerPhone() {
+        listOf("", "12345", "customer-phone", "++967").forEach { phone ->
+            assertNull(
+                "A direct USSD command must never be sent with an invalid customer phone: $phone",
+                SmsTextAnalysis.buildUssdCommand("*123*(phone)#", phone)
+            )
+        }
+    }
+
+    @Test
     fun parsesArabicThousandsAndDecimalSeparatorsWithoutTruncatingCents() {
         val notice = SmsTextAnalysis.parseBankNotice(
             "مصرف الأمل\nمن حساب: أحمد محمد\nلكم: ٢٬٠٠٠٫٥٠ ر.ي.\nالرصيد لكم: ٦٬٠٨٥٫٠٦ ر.ي.",
