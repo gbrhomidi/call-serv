@@ -68,8 +68,8 @@ checks = {
         and "sendUssdRequest(command" in processor
     ),
     "the full USSD template substitutes the customer phone and rejects unsafe characters": all(
-        token in analysis for token in ("fun buildUssdCommand(", "normalizePhone(phone)", "marker.replaceFirst(template")
-    ),
+        token in analysis for token in ("fun buildUssdCommand(", "normalizePhone(phone)", "marker.replace(command")
+    ) and "foundMarker" in analysis and "command.matches(Regex" in analysis,
     "activation orders and bank reconciliation persist in SQLite": all(
         token in store for token in ("sms_activation_requests", "fun acceptBankPayment(", "status='awaiting_payment'")
     ),
