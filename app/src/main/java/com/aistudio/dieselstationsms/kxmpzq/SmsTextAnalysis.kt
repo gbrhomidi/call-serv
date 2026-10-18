@@ -65,7 +65,7 @@ internal object SmsTextAnalysis {
             }
         }
         if (!foundMarker) return null
-        if (command.length !in 3..100 || !command.matches(Regex("[0-9*#+,;.\-]+"))) return null
+        if (command.length !in 3..100 || !command.matches(Regex("[0-9*#+,;.\\-]+"))) return null
         return command
     }
 
