@@ -54,9 +54,18 @@ internal object SmsTextAnalysis {
             Regex("%phone%", RegexOption.IGNORE_CASE),
             Regex("\\bphone\\b", RegexOption.IGNORE_CASE)
         )
-        val marker = markers.firstOrNull { it.containsMatchIn(template) } ?: return null
-        val command = marker.replaceFirst(template, normalizedPhone)
-        if (command.length !in 3..100 || !command.matches(Regex("[0-9*#+,;.\\-]+"))) return null
+        var command = template
+        var foundMarker = false
+        // Replace every supported marker, not only the first one. This prevents
+        // a valid direct USSD command from retaining a second literal "phone".
+        markers.forEach { marker ->
+            if (marker.containsMatchIn(command)) {
+                command = marker.replace(command, normalizedPhone)
+                foundMarker = true
+            }
+        }
+        if (!foundMarker) return null
+        if (command.length !in 3..100 || !command.matches(Regex("[0-9*#+,;.\-]+"))) return null
         return command
     }
 
