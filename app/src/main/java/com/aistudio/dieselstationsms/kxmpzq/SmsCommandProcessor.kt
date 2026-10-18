@@ -217,28 +217,37 @@ internal object SmsCommandProcessor {
             Log.i(TAG, "USSD dispatch initiated request=$requestId attempt=$attempt commandLength=${command.length}")
             telephony.sendUssdRequest(command, object : TelephonyManager.UssdResponseCallback() {
                 override fun onReceiveUssdResponse(telephonyManager: TelephonyManager, ussdRequest: String, response: CharSequence) {
-                    cancelTimeoutSafely(context, requestId, attempt)
-                    if (SmsTextAnalysis.isFailureMessage(response.toString())) {
-                        activationFailure(context, helper, store, request, response.toString(), "تعذر تفعيل الخدمة عبر شبكة المشغل")
-                        return
-                    }
-                    val completed = store.completeSuccess(requestId, response.toString())
-                    if (completed != null) {
-                        reply(context, helper, completed.optString("customer_phone"), "تم تفعيل ${completed.optString("service_name")} بنجاح. التكلفة ${formatMoney(completed.optLong("amount_cents") / 100.0)} ريال.")
-                    }
-                    Log.i(TAG, "Direct USSD callback completed request=$requestId responseLength=${response.length}")
+                    // A network callback only reports the USSD session result. It is not
+                    // proof that the supplier applied the purchased package. Keep the
+                    // timeout/reconciliation work alive and wait for a trusted supplier SMS.
+                    val failure = SmsTextAnalysis.isFailureMessage(response.toString())
+                    Log.i(TAG, "USSD callback received request=$requestId attempt=$attempt result=${if (failure) "negative" else "non_final"} responseLength=${response.length}; awaiting trusted provider confirmation")
                 }
                 override fun onReceiveUssdResponseFailed(telephonyManager: TelephonyManager, ussdRequest: String, failureCode: Int) {
-                    Log.e(TAG, "Carrier USSD request failed request=$requestId failureCode=$failureCode")
-                    cancelTimeoutSafely(context, requestId, attempt)
-                    activationFailure(context, helper, store, request, "USSD request failed with code $failureCode", "تعذر تأكيد التفعيل عبر شبكة المشغل")
+                    // A callback failure is ambiguous: the carrier may have processed the
+                    // request before the response channel failed. Do not release credit,
+                    // mark the order failed, or re-send a potentially billable USSD code.
+                    // The scheduled worker checks supplier state and permits only a safe retry.
+                    Log.w(TAG, "Carrier USSD callback failed request=$requestId attempt=$attempt failureCode=$failureCode; awaiting reconciliation")
+                    notifyPendingReconciliation(context, helper, request)
                 }
             }, Handler(Looper.getMainLooper()))
         } catch (e: Exception) {
-            cancelTimeoutSafely(context, requestId, attempt)
-            activationFailure(context, helper, store, request, "تعذر إرسال USSD: ${e.javaClass.simpleName}", "تعذر تأكيد التفعيل عبر شبكة المشغل")
-            Log.e(TAG, "USSD dispatch failed request=$requestId error=${e.javaClass.simpleName}")
+            // Keep the scheduled reconciliation because the exception may occur after
+            // the modem accepted the command; never blindly issue a second purchase.
+            Log.e(TAG, "USSD dispatch outcome uncertain request=$requestId error=${e.javaClass.simpleName}")
+            notifyPendingReconciliation(context, helper, request)
         }
+    }
+
+    private fun notifyPendingReconciliation(context: Context, helper: DatabaseHelper, request: JSONObject) {
+        val serviceName = request.optString("service_name", "الخدمة")
+        val message = if (request.optString("payment_method") == "bank") {
+            "لم يصل تأكيد نهائي لتفعيل $serviceName بعد التحقق من التحويل. الطلب قيد مراجعة حالة المورد؛ لا تعِد التحويل أو الطلب، وتواصل مع الدعم إذا لم يصلك تحديث."
+        } else {
+            "لم يصل تأكيد نهائي لتفعيل $serviceName بعد. الطلب قيد التحقق من حالة المورد؛ لم نضف المبلغ إلى رصيدك الآجل، ولا تعِد الطلب الآن منعاً للتكرار."
+        }
+        reply(context, helper, request.optString("customer_phone"), message)
     }
 
     private fun activationFailure(
