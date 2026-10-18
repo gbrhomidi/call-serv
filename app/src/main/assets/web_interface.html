@@ -1233,10 +1233,10 @@
                 <div class="table-container">
                     <table class="data-table">
                         <thead>
-                            <tr><th>#</th><th>النوع والاسم</th><th>اسم الحساب</th><th>مرسل البنك</th><th>هاتف USSD</th><th>الرصيد</th><th>الحالة</th><th>الإجراءات</th></tr>
+                            <tr><th>#</th><th>النوع والاسم</th><th>اسم الحساب</th><th>مرسل البنك</th><th>الحالة</th><th>الإجراءات</th></tr>
                         </thead>
                         <tbody id="suppliersTable">
-                            <tr><td colspan="8" class="text-center text-muted">جاري التحميل...</td></tr>
+                            <tr><td colspan="6" class="text-center text-muted">جاري التحميل...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1259,7 +1259,7 @@
                     <button class="btn btn-success" onclick="exportJsonFile('telecom-companies.json', currentTelecoms)">📤 تصدير</button>
                     <input type="text" class="form-control" placeholder="بحث..." oninput="filterTable('telecomsTable', this.value)">
                 </div>
-                <div class="table-container"><table class="data-table"><thead><tr><th>#</th><th>الشركة</th><th>رقم USSD</th><th>البادئات</th><th>رقم رصيد الشركة</th><th>الإجراءات</th></tr></thead><tbody id="telecomsTable"><tr><td colspan="6" class="text-center text-muted">جاري التحميل...</td></tr></tbody></table></div>
+                <div class="table-container"><table class="data-table"><thead><tr><th>#</th><th>الشركة</th><th>البادئات</th><th>الإجراءات</th></tr></thead><tbody id="telecomsTable"><tr><td colspan="4" class="text-center text-muted">جاري التحميل...</td></tr></tbody></table></div>
             </div>
         </div>
 
@@ -1585,8 +1585,6 @@
                     <div class="form-group"><label>اسم البنك/الجهة كما يظهر في رسالة البنك *</label><input type="text" class="form-control" id="supplierName" required placeholder="اسم الجهة في SMS"></div>
                     <div class="form-group"><label>اسم حساب النظام لدى الجهة</label><input type="text" class="form-control" id="supplierAccountName"></div>
                     <div class="form-group"><label>رقم مرسل رسائل البنك الموثوق *</label><input type="tel" class="form-control" id="supplierTrustedSender" required></div>
-                    <div class="form-group"><label>رقم هاتف شركة الاتصالات لنتيجة USSD ورصيد التطبيق</label><input type="tel" class="form-control" id="supplierUssdPhone"></div>
-                    <div class="form-group"><label>رصيد التطبيق الحالي قبل أي محاولة تفعيل</label><input type="number" step="0.01" class="form-control" id="supplierOurBalance" value="0"></div>
                     <div class="form-group"><label>نص SMS للاستعلام عن رصيد التطبيق</label><textarea class="form-control" id="institutionBalanceQuery" rows="2"></textarea></div>
 
                     <div class="form-group">
@@ -1606,7 +1604,7 @@
         </div>
     </div>
 
-    <div class="modal-overlay" id="telecomModal"><div class="modal"><div class="modal-header"><h2 class="modal-title">شركة اتصالات</h2><button class="modal-close" onclick="closeModal('telecomModal')">✕</button></div><div class="modal-body"><form onsubmit="saveTelecom(event)"><input type="hidden" id="telecomEditId" value="0"><div class="form-group"><label>اسم شركة الاتصالات *</label><input class="form-control" id="telecomName" name="name" required maxlength="120" autocomplete="organization"></div><div class="form-group"><label>الرقم الذي يرسل إليه أمر USSD</label><input class="form-control" id="telecomUssdPhone" type="tel"></div><div class="form-group"><label>بادئة الهاتف 1</label><input class="form-control" id="telecomPrefix1"></div><div class="form-group"><label>بادئة الهاتف 2</label><input class="form-control" id="telecomPrefix2"></div><div class="form-group"><label>بادئة الهاتف 3</label><input class="form-control" id="telecomPrefix3"></div><div class="form-group"><label>بادئة الهاتف 4</label><input class="form-control" id="telecomPrefix4"></div><div class="form-group"><label>رقم الشركة المرسل لنتيجة SMS/USSD ورصيد التطبيق</label><input class="form-control" id="telecomBalancePhone" type="tel"></div><button type="submit" class="btn btn-primary">💾 حفظ</button></form></div></div></div>
+    <div class="modal-overlay" id="telecomModal"><div class="modal"><div class="modal-header"><h2 class="modal-title">شركة اتصالات</h2><button class="modal-close" onclick="closeModal('telecomModal')">✕</button></div><div class="modal-body"><form onsubmit="saveTelecom(event)"><input type="hidden" id="telecomEditId" value="0"><div class="form-group"><label>اسم شركة الاتصالات *</label><input class="form-control" id="telecomName" name="name" required maxlength="120" autocomplete="organization"></div><div class="form-group"><label>بادئة الهاتف 1</label><input class="form-control" id="telecomPrefix1"></div><div class="form-group"><label>بادئة الهاتف 2</label><input class="form-control" id="telecomPrefix2"></div><div class="form-group"><label>بادئة الهاتف 3</label><input class="form-control" id="telecomPrefix3"></div><div class="form-group"><label>بادئة الهاتف 4</label><input class="form-control" id="telecomPrefix4"></div><button type="submit" class="btn btn-primary">💾 حفظ</button></form></div></div></div>
 
     <!-- SMS Detail Modal -->
     <div class="modal-overlay" id="smsDetailModal">
@@ -2140,7 +2138,7 @@
             currentSuppliers = Array.isArray(data) ? data : [];
             const tbody = document.getElementById('suppliersTable');
             if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">لا توجد جهات مالية</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">لا توجد جهات مالية</td></tr>';
                 return;
             }
             tbody.innerHTML = data.map((s, i) => `
@@ -2149,8 +2147,6 @@
                     <td><strong>${s.name}</strong><br><small>${({bank:'بنك',remittance:'حوالات',wallet:'محفظة'}[s.institution_type] || 'جهة')}</small></td>
                     <td>${s.bank_account_name || '—'}</td>
                     <td>${s.trusted_sender || '—'}</td>
-                    <td>${s.ussd_result_phone || '—'}</td>
-                    <td>${s.ourBalance} ريال</td>
                     <td><span class="badge ${s.status === 'active' ? 'badge-success' : 'badge-danger'}">${s.status === 'active' ? 'مفعل' : 'غير مفعل'}</span></td>
                     <td>
                         <button class="btn btn-sm btn-primary" onclick="editSupplier(${s.id})">✏️</button>
@@ -2166,10 +2162,8 @@
             document.getElementById('supplierType').value = data?.institution_type || 'bank';
             document.getElementById('supplierAccountName').value = data?.bank_account_name || '';
             document.getElementById('supplierTrustedSender').value = data?.trusted_sender || '';
-            document.getElementById('supplierUssdPhone').value = data?.ussd_result_phone || '';
             document.getElementById('institutionBalanceQuery').value = data?.balance_query_sms || '';
             document.getElementById('supplierName').value = data?.name || '';
-            document.getElementById('supplierOurBalance').value = data?.ourBalance || 0;
             document.getElementById('supplierStatus').value = data?.status || 'active';
             document.getElementById('supplierNotes').value = data?.notes || '';
             document.getElementById('supplierModal').classList.add('active');
@@ -2207,9 +2201,7 @@
                 institution_type: document.getElementById('supplierType').value,
                 bank_account_name: document.getElementById('supplierAccountName').value.trim(),
                 trusted_sender: document.getElementById('supplierTrustedSender').value.trim(),
-                ussd_result_phone: document.getElementById('supplierUssdPhone').value.trim(),
                 balance_query_sms: document.getElementById('institutionBalanceQuery').value.trim(),
-                ourBalance: parseFloat(document.getElementById('supplierOurBalance').value) || 0,
                 status: document.getElementById('supplierStatus').value,
                 notes: document.getElementById('supplierNotes').value.trim()
             };
@@ -2241,7 +2233,7 @@
             if (!result.success) return;
             currentTelecoms = result.data || [];
             const tbody = document.getElementById('telecomsTable');
-            tbody.innerHTML = currentTelecoms.length ? currentTelecoms.map((t,i) => `<tr><td>${i+1}</td><td>${t.name}</td><td>${t.ussd_phone || '—'}</td><td>${[t.prefix1,t.prefix2,t.prefix3,t.prefix4].filter(Boolean).join('، ') || '—'}</td><td>${t.balance_phone || '—'}</td><td><button class="btn btn-sm btn-primary" onclick="openTelecomModal(${t.id})">✏️</button> <button class="btn btn-sm btn-danger" onclick="deleteTelecom(${t.id})">🗑️</button></td></tr>`).join('') : '<tr><td colspan="6" class="text-center text-muted">لا توجد شركات اتصالات</td></tr>';
+            tbody.innerHTML = currentTelecoms.length ? currentTelecoms.map((t,i) => `<tr><td>${i+1}</td><td>${t.name}</td><td>${[t.prefix1,t.prefix2,t.prefix3,t.prefix4].filter(Boolean).join('، ') || '—'}</td><td><button class="btn btn-sm btn-primary" onclick="openTelecomModal(${t.id})">✏️</button> <button class="btn btn-sm btn-danger" onclick="deleteTelecom(${t.id})">🗑️</button></td></tr>`).join('') : '<tr><td colspan="4" class="text-center text-muted">لا توجد شركات اتصالات</td></tr>';
         }
         async function loadTelecomOptions() {
             const result = await apiCall('get_telecom_companies'); currentTelecoms = result.data || [];
@@ -2251,7 +2243,7 @@
         function openTelecomModal(id=0) {
             const t = currentTelecoms.find(x => x.id == id) || {};
             document.getElementById('telecomEditId').value = t.id || 0;
-            for (const [id, key] of [['telecomName','name'],['telecomUssdPhone','ussd_phone'],['telecomPrefix1','prefix1'],['telecomPrefix2','prefix2'],['telecomPrefix3','prefix3'],['telecomPrefix4','prefix4'],['telecomBalancePhone','balance_phone']]) document.getElementById(id).value = t[key] || '';
+            for (const [id, key] of [['telecomName','name'],['telecomPrefix1','prefix1'],['telecomPrefix2','prefix2'],['telecomPrefix3','prefix3'],['telecomPrefix4','prefix4']]) document.getElementById(id).value = t[key] || '';
             document.getElementById('telecomModal').classList.add('active');
         }
         async function saveTelecom(e) {
@@ -2267,8 +2259,9 @@
             const data = {
                 id: Number(value('telecomEditId')) || 0,
                 name,
-                ussd_phone: value('telecomUssdPhone'),
-                balance_phone: value('telecomBalancePhone')
+                // USSD is sent directly from this device; no provider phone is required.
+                ussd_phone: '',
+                balance_phone: ''
             };
             for (let i = 1; i <= 4; i++) data[`prefix${i}`] = value(`telecomPrefix${i}`);
             const result = await apiCall('save_telecom_company', data);

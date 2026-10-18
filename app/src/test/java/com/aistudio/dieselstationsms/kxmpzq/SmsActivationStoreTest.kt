@@ -251,7 +251,7 @@ class SmsActivationStoreTest {
     }
 
     @Test
-    fun `request creation rejects missing activation template provider and bank prerequisites`() {
+    fun `request creation rejects only missing template and bank prerequisites`() {
         val customer = customer(name = "تهيئة ناقصة", phone = "777888999")
         val missingTemplate = service(price = 5.0, command = "")
         assertTrue(store.createRequest(customer, missingTemplate, customer.getString("phone1")).has("error"))
@@ -259,13 +259,15 @@ class SmsActivationStoreTest {
 
         val validService = service(price = 5.0)
         helper.setSetting("activation_provider_phone", "")
-        assertTrue(store.createRequest(customer, validService, customer.getString("phone1")).has("error"))
-        assertEquals(0L, count("SELECT count(*) FROM sms_activation_requests"))
+        val directRequest = store.createRequest(customer, validService, customer.getString("phone1"))
+        assertFalse(directRequest.has("error"))
+        assertEquals("awaiting_payment", directRequest.getString("status"))
+        assertEquals(1L, count("SELECT count(*) FROM sms_activation_requests"))
 
-        helper.setSetting("activation_provider_phone", "+967777000001")
         helper.setSetting("system_bank_name", "")
-        assertTrue(store.createRequest(customer, validService, customer.getString("phone1")).has("error"))
-        assertEquals(0L, count("SELECT count(*) FROM sms_activation_requests"))
+        val bankBlocked = store.createRequest(customer, service(price = 6.0), customer.getString("phone1"))
+        assertTrue(bankBlocked.has("error"))
+        assertEquals(1L, count("SELECT count(*) FROM sms_activation_requests"))
     }
 
     @Test

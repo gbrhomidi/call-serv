@@ -190,12 +190,6 @@ internal object SmsCommandProcessor {
         val request = store.getRequest(requestId) ?: return
         val helper = DatabaseHelper.getInstance(context)
         val attempt = request.optInt("attempt_count", 1).coerceAtLeast(1)
-        val providerPhone = SmsTextAnalysis.normalizePhone(request.optString("provider_phone").ifBlank { helper.getSetting("activation_provider_phone") })
-        if (providerPhone.length < 7) {
-            Log.e(TAG, "USSD dispatch blocked request=$requestId reason=provider_phone_missing")
-            activationFailure(context, helper, store, request, "رقم المورد غير مضبوط", "تعذر بدء التفعيل بسبب نقص إعداد رقم المورد")
-            return
-        }
         val command = SmsTextAnalysis.buildUssdCommand(request.optString("activation_command"), request.optString("customer_phone"))
         if (command == null) {
             Log.e(TAG, "USSD dispatch blocked request=$requestId reason=invalid_activation_template")
@@ -223,8 +217,16 @@ internal object SmsCommandProcessor {
             Log.i(TAG, "USSD dispatch initiated request=$requestId attempt=$attempt commandLength=${command.length}")
             telephony.sendUssdRequest(command, object : TelephonyManager.UssdResponseCallback() {
                 override fun onReceiveUssdResponse(telephonyManager: TelephonyManager, request: String, response: CharSequence) {
-                    // The carrier UI response does not prove provider-side charging/success; await the registered provider SMS.
-                    Log.i(TAG, "Carrier USSD callback received request=$requestId responseLength=${response.length}; awaiting provider SMS")
+                    cancelTimeoutSafely(context, requestId, attempt)
+                    if (SmsTextAnalysis.isFailureMessage(response.toString())) {
+                        activationFailure(context, helper, store, request, response.toString(), "تعذر تفعيل الخدمة عبر شبكة المشغل")
+                        return
+                    }
+                    val completed = store.completeSuccess(requestId, response.toString())
+                    if (completed != null) {
+                        reply(context, helper, completed.optString("customer_phone"), "تم تفعيل ${completed.optString("service_name")} بنجاح. التكلفة ${formatMoney(completed.optLong("amount_cents") / 100.0)} ريال.")
+                    }
+                    Log.i(TAG, "Direct USSD callback completed request=$requestId responseLength=${response.length}")
                 }
                 override fun onReceiveUssdResponseFailed(telephonyManager: TelephonyManager, ussdRequest: String, failureCode: Int) {
                     Log.e(TAG, "Carrier USSD request failed request=$requestId failureCode=$failureCode")

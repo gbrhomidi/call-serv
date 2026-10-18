@@ -42,9 +42,8 @@ internal class SmsActivationStore(context: Context) {
         val now = System.currentTimeMillis()
         val result = JSONObject()
         if (customerId <= 0 || serviceId <= 0 || amountCents <= 0) return result.put("error", "بيانات الطلب غير صالحة")
-        if (normalizedPhone.length < 7 || providerPhone.length < 7 ||
-            SmsTextAnalysis.buildUssdCommand(command, normalizedPhone) == null) {
-            return result.put("error", "بيانات التفعيل أو رقم المورد غير مكتمل؛ لم يُنشأ طلب")
+        if (normalizedPhone.length < 7 || SmsTextAnalysis.buildUssdCommand(command, normalizedPhone) == null) {
+            return result.put("error", "قالب أمر التفعيل أو رقم العميل غير مكتمل؛ لم يُنشأ طلب")
         }
         db.beginTransaction()
         try {
