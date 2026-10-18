@@ -216,7 +216,7 @@ internal object SmsCommandProcessor {
                 ?: throw IllegalStateException("TelephonyManager unavailable")
             Log.i(TAG, "USSD dispatch initiated request=$requestId attempt=$attempt commandLength=${command.length}")
             telephony.sendUssdRequest(command, object : TelephonyManager.UssdResponseCallback() {
-                override fun onReceiveUssdResponse(telephonyManager: TelephonyManager, request: String, response: CharSequence) {
+                override fun onReceiveUssdResponse(telephonyManager: TelephonyManager, ussdRequest: String, response: CharSequence) {
                     cancelTimeoutSafely(context, requestId, attempt)
                     if (SmsTextAnalysis.isFailureMessage(response.toString())) {
                         activationFailure(context, helper, store, request, response.toString(), "تعذر تفعيل الخدمة عبر شبكة المشغل")
