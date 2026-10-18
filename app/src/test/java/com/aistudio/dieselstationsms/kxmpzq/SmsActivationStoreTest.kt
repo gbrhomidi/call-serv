@@ -180,6 +180,7 @@ class SmsActivationStoreTest {
 
     @Test
     fun `provider failure remains financially uncertain and late success reconciles exactly once`() {
+        helper.setSetting("system_bank_sender_phone", "777000009")
         val customer = customer(name = "نتيجة مورد متأخرة", phone = "777444557", allowCredit = true, creditLimit = 100.0)
         val request = store.createRequest(customer, service(price = 8.0), customer.getString("phone1"))
         val id = request.getLong("id")
