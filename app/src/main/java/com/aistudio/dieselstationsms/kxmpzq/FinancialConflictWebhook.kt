@@ -15,6 +15,7 @@ internal object FinancialConflictNotifier {
     private const val KEY_URL = "webhook_url"
     private const val KEY_SECRET = "webhook_secret"
     private const val KEY_PAYLOAD = "webhook_payload"
+    private const val KEY_DELIVERY_ID = "webhook_delivery_id"
     private const val MAX_SECRET_LENGTH = 500
 
     fun enqueue(
@@ -30,21 +31,28 @@ internal object FinancialConflictNotifier {
         val enabled = helper.getSetting("financial_conflict_webhook_enabled").trim().lowercase() in setOf("1", "true", "yes")
         if (!enabled || !url.startsWith("https://") || url.length > 2048) return
 
+        val messageHash = sha256(message)
+        val eventKey = sha256(listOf(eventType, requestId ?: 0L, SmsTextAnalysis.normalizePhone(sender), reason.trim(), messageHash).joinToString("|"))
         val payload = JSONObject().apply {
             put("event", eventType)
+            put("event_id", eventKey)
             put("occurred_at", System.currentTimeMillis())
             if (requestId != null) put("request_id", requestId)
             put("sender", SmsTextAnalysis.normalizePhone(sender))
             put("reason", reason.take(500))
-            put("message_sha256", sha256(message))
+            put("message_sha256", messageHash)
             put("source", "android_sms_activation")
         }.toString()
         val secret = helper.getSetting("financial_conflict_webhook_secret").take(MAX_SECRET_LENGTH)
-        val name = "financial-conflict-${sha256(payload).take(32)}"
+        val store = SmsActivationStore(context.applicationContext)
+        val deliveryId = store.enqueueWebhookDelivery(eventKey, requestId, eventType, sha256(payload), url)
+        if (deliveryId <= 0L) return
+        val name = "financial-conflict-$eventKey"
         val data = Data.Builder()
             .putString(KEY_URL, url)
             .putString(KEY_SECRET, secret)
             .putString(KEY_PAYLOAD, payload)
+            .putLong(KEY_DELIVERY_ID, deliveryId)
             .build()
         val request = OneTimeWorkRequestBuilder<FinancialConflictWebhookWorker>()
             .setInputData(data)
@@ -57,6 +65,7 @@ internal object FinancialConflictNotifier {
     internal const val DATA_URL = KEY_URL
     internal const val DATA_SECRET = KEY_SECRET
     internal const val DATA_PAYLOAD = KEY_PAYLOAD
+    internal const val DATA_DELIVERY_ID = KEY_DELIVERY_ID
 
     private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")
         .digest(value.toByteArray(Charsets.UTF_8))

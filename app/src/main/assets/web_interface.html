@@ -1098,6 +1098,18 @@
                     <div class="stat-label">الديون المستحقة</div>
                     <div class="stat-trend down">-2%</div>
                 </div>
+                <div class="stat-card" onclick="showScreen('activation-reviews')">
+                    <div class="stat-icon">🧾</div>
+                    <div class="stat-number" id="dashPendingReviews">0</div>
+                    <div class="stat-label">طلبات قيد المراجعة</div>
+                    <div class="stat-trend down">تحتاج إجراء</div>
+                </div>
+                <div class="stat-card" onclick="showScreen('activation-reviews')">
+                    <div class="stat-icon">🔗</div>
+                    <div class="stat-number" id="dashWebhookPending">0</div>
+                    <div class="stat-label">Webhook معلقة/فاشلة</div>
+                    <div class="stat-trend down">تحتاج متابعة</div>
+                </div>
             </div>
 
             <div id="dashAlerts"></div>
@@ -1316,8 +1328,14 @@
                         <option value="">كل الطلبات المعلقة</option><option value="uncertain">غير محسومة</option><option value="reconciling">قيد المصالحة</option><option value="awaiting_payment">بانتظار الدفع</option><option value="pending_provider">بانتظار المورد</option>
                     </select>
                 </div>
+                <div id="activationReviewSummary" class="flex flex-wrap gap-1 mb-1"></div>
                 <div class="table-container"><table class="data-table"><thead><tr><th>#</th><th>العميل</th><th>الخدمة</th><th>المبلغ</th><th>طريقة الدفع</th><th>الحالة</th><th>آخر تحديث</th><th>الإجراء</th></tr></thead><tbody id="activationReviewsTable"><tr><td colspan="8" class="text-center text-muted">جاري التحميل...</td></tr></tbody></table></div>
                 <div id="activationReviewEvents" class="mt-2"></div>
+                <div class="card mt-2">
+                    <div class="card-title"><span class="icon">🔗</span> سجل Webhook للتعارضات المالية</div>
+                    <div class="flex flex-wrap gap-1 mb-1"><button class="btn btn-sm btn-outline" onclick="loadWebhookDeliveries()">🔄 تحديث سجل Webhook</button></div>
+                    <div class="table-container"><table class="data-table"><thead><tr><th>الحدث</th><th>الطلب</th><th>الحالة</th><th>المحاولات</th><th>HTTP</th><th>آخر خطأ</th><th>آخر تحديث</th></tr></thead><tbody id="webhookDeliveriesTable"><tr><td colspan="7" class="text-center text-muted">جاري التحميل...</td></tr></tbody></table></div>
+                </div>
             </div>
         </div>
 
@@ -1852,6 +1870,8 @@
                     document.getElementById('dashServices').textContent = stats.total_services || 0;
                     document.getElementById('dashSmsToday').textContent = stats.sms_today || 0;
                     document.getElementById('dashDue').textContent = (stats.total_due || 0).toLocaleString();
+                    document.getElementById('dashPendingReviews').textContent = stats.pending_activation_reviews || 0;
+                    document.getElementById('dashWebhookPending').textContent = Number(stats.webhook_queued || 0) + Number(stats.webhook_sending || 0) + Number(stats.webhook_retry || 0) + Number(stats.webhook_failed || 0);
                     if (result.ai_insight) {
                         document.getElementById('aiInsight').innerHTML = result.ai_insight;
                     } else {
@@ -2408,22 +2428,25 @@
 
         function renderNotifications(data) {
             const container = document.getElementById('notificationsList');
+            container.replaceChildren();
             if (!data || data.length === 0) {
-                container.innerHTML =
-                '<div class="text-center text-muted" style="padding:20px;">لا توجد إشعارات</div>';
+                const empty = document.createElement('div');
+                empty.className = 'text-center text-muted'; empty.style.padding = '20px';
+                empty.textContent = 'لا توجد إشعارات'; container.appendChild(empty);
                 return;
             }
-            container.innerHTML = data.map(n => `
-                <div style="padding:12px 0;border-bottom:var(--border-width) var(--border-style) var(--border-color);">
-                    <div style="font-weight:700;">${n.title}</div>
-                    <div style="font-size:0.85rem;color:var(--text-muted);">${n.message}</div>
-                    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">${n.time}</div>
-                </div>
-            `).join('');
+            data.forEach(n => {
+                const item = document.createElement('div'); item.style.cssText = 'padding:12px 0;border-bottom:var(--border-width) var(--border-style) var(--border-color);';
+                const title = document.createElement('div'); title.style.fontWeight = '700'; title.textContent = n.title || '';
+                const message = document.createElement('div'); message.style.cssText = 'font-size:0.85rem;color:var(--text-muted);'; message.textContent = n.message || '';
+                const time = document.createElement('div'); time.style.cssText = 'font-size:0.7rem;color:var(--text-muted);margin-top:4px;'; time.textContent = n.time || '';
+                item.append(title, message, time); container.appendChild(item);
+            });
         }
 
         async function loadActivationReviews() {
             const status = document.getElementById('activationReviewStatus')?.value || '';
+            await loadWebhookDeliveries();
             const result = await apiCall('get_activation_reviews', status ? { status } : {});
             const tbody = document.getElementById('activationReviewsTable');
             if (!tbody) return;
@@ -2441,10 +2464,12 @@
                     const cell = document.createElement('td'); cell.textContent = String(value ?? ''); row.appendChild(cell);
                 });
                 const actions = document.createElement('td');
-                [['success', 'اعتماد'], ['failed', 'رفض'], ['uncertain', 'إبقاء معلقة']].forEach(([outcome, label]) => {
-                    const button = document.createElement('button'); button.className = `btn btn-sm ${outcome === 'success' ? 'btn-success' : outcome === 'failed' ? 'btn-danger' : 'btn-warning'}`; button.textContent = label;
-                    button.onclick = () => resolveActivationReview(request.id, outcome); actions.appendChild(button); actions.appendChild(document.createTextNode(' '));
-                });
+                if (!['success', 'failed'].includes(request.status)) {
+                    [['success', 'اعتماد'], ['failed', 'رفض'], ['uncertain', 'إبقاء معلقة']].forEach(([outcome, label]) => {
+                        const button = document.createElement('button'); button.className = `btn btn-sm ${outcome === 'success' ? 'btn-success' : outcome === 'failed' ? 'btn-danger' : 'btn-warning'}`; button.textContent = label;
+                        button.onclick = () => resolveActivationReview(request.id, outcome); actions.appendChild(button); actions.appendChild(document.createTextNode(' '));
+                    });
+                }
                 const eventsButton = document.createElement('button'); eventsButton.className = 'btn btn-sm btn-outline'; eventsButton.textContent = 'السجل'; eventsButton.onclick = () => loadActivationEvents(request.id); actions.appendChild(eventsButton);
                 row.appendChild(actions); tbody.appendChild(row);
             });
@@ -2459,6 +2484,24 @@
             (result.success && Array.isArray(result.data) ? result.data : []).forEach(event => {
                 const line = document.createElement('div'); line.style.cssText = 'padding:6px 0;border-bottom:1px dashed var(--border-color);';
                 line.textContent = `${event.created_at || ''} — ${event.event_type || ''} — ${event.detail || ''}`; container.appendChild(line);
+            });
+        }
+
+        async function loadWebhookDeliveries() {
+            const result = await apiCall('get_webhook_deliveries', { limit: 100 });
+            const tbody = document.getElementById('webhookDeliveriesTable');
+            if (!tbody) return;
+            tbody.replaceChildren();
+            if (!result.success || !Array.isArray(result.data) || result.data.length === 0) {
+                const row = document.createElement('tr'); const cell = document.createElement('td');
+                cell.colSpan = 7; cell.className = 'text-center text-muted'; cell.textContent = 'لا توجد عمليات Webhook'; row.appendChild(cell); tbody.appendChild(row); return;
+            }
+            result.data.forEach(item => {
+                const row = document.createElement('tr');
+                [item.event_type, item.request_id || '—', item.status, item.attempt_count || 0, item.last_http_code || '—', item.last_error || '—', new Date(Number(item.updated_at) || 0).toLocaleString('ar')].forEach(value => {
+                    const cell = document.createElement('td'); cell.textContent = String(value ?? ''); row.appendChild(cell);
+                });
+                tbody.appendChild(row);
             });
         }
 

@@ -42,6 +42,8 @@ internal class TelecomWebApi(context: Context) {
                 "get_notifications" -> notifications()
                 "get_activation_reviews" -> SmsActivationStore(appContext).listReviewRequests(params.optString("status").ifBlank { null })
                 "get_activation_events" -> SmsActivationStore(appContext).getRequestEvents(requireLongId(params))
+                "get_webhook_deliveries" -> SmsActivationStore(appContext).listWebhookDeliveries(params.optInt("limit", 100))
+                "get_webhook_stats" -> SmsActivationStore(appContext).webhookStats()
                 "resolve_activation_review" -> resolveActivationReview(params)
                 "generate_report" -> report(params.optString("report_type"))
                 "export_data" -> db.exportAllData()
@@ -61,8 +63,18 @@ internal class TelecomWebApi(context: Context) {
     private fun dashboard(): JSONArray {
         val today = dateString(Date())
         val stats = db.getDashboardStats()
+        val activationStore = SmsActivationStore(appContext)
+        val pendingReviews = activationStore.listReviewRequests()
+        val webhookStats = activationStore.webhookStats()
         stats.put("sms_today", db.getSmsMetrics(fromDate = today, toDate = today).length())
         stats.put("total_due", stats.optDouble("total_balance", 0.0))
+        stats.put("pending_activation_reviews", pendingReviews.length())
+        stats.put("webhook_total", webhookStats.optInt("total"))
+        stats.put("webhook_queued", webhookStats.optInt("queued"))
+        stats.put("webhook_sending", webhookStats.optInt("sending"))
+        stats.put("webhook_retry", webhookStats.optInt("retry"))
+        stats.put("webhook_delivered", webhookStats.optInt("delivered"))
+        stats.put("webhook_failed", webhookStats.optInt("failed"))
         return JSONArray().put(stats)
     }
 
@@ -274,6 +286,7 @@ internal class TelecomWebApi(context: Context) {
 
     private fun notifications(): JSONArray {
         val metrics = db.getSmsMetrics()
+        val webhookRows = SmsActivationStore(appContext).listWebhookDeliveries(30)
         val result = JSONArray()
         for (i in 0 until minOf(metrics.length(), 30)) {
             val row = metrics.optJSONObject(i) ?: continue
@@ -283,6 +296,21 @@ internal class TelecomWebApi(context: Context) {
                 put("title", if (event.contains("FAIL", ignoreCase = true)) "تنبيه: تعذر تنفيذ عملية" else "نشاط SMS")
                 put("message", row.optString("details").ifBlank { event })
                 put("time", row.optString("created_at"))
+            })
+        }
+        for (i in 0 until webhookRows.length()) {
+            val row = webhookRows.optJSONObject(i) ?: continue
+            val status = row.optString("status")
+            result.put(JSONObject().apply {
+                put("id", "webhook-${row.optLong("id")}")
+                put("title", when (status) {
+                    "delivered" -> "Webhook: تم التسليم"
+                    "retry", "sending", "queued" -> "Webhook: بانتظار الإرسال أو الإعادة"
+                    else -> "Webhook: فشل التسليم"
+                })
+                put("message", "${row.optString("event_type")} — الحالة: $status — المحاولة ${row.optInt("attempt_count")}")
+                put("time", row.optLong("updated_at"))
+                put("kind", "webhook")
             })
         }
         return result

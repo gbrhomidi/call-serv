@@ -19,6 +19,8 @@ receiver = read("app/src/main/java/com/aistudio/dieselstationsms/kxmpzq/SmsRecei
 processor = read("app/src/main/java/com/aistudio/dieselstationsms/kxmpzq/SmsCommandProcessor.kt")
 analysis = read("app/src/main/java/com/aistudio/dieselstationsms/kxmpzq/SmsTextAnalysis.kt")
 store = read("app/src/main/java/com/aistudio/dieselstationsms/kxmpzq/SmsActivationStore.kt")
+webhook = read("app/src/main/java/com/aistudio/dieselstationsms/kxmpzq/FinancialConflictWebhook.kt")
+webhook_worker = read("app/src/main/java/com/aistudio/dieselstationsms/kxmpzq/FinancialConflictWebhookWorker.kt")
 manifest = read("app/src/main/AndroidManifest.xml")
 gradle_build = read("app/build.gradle.kts")
 strings = read("app/src/main/res/values/strings.xml")
@@ -92,6 +94,11 @@ checks = {
         and all(token in backup_worker for token in ("services", "suppliers", "transfers", "activations", "settings"))
         and all(token in compatibility for token in ("put(\"services\"", "put(\"suppliers\"", "put(\"transfers\"", "put(\"activations\"", "put(\"settings\""))
     ),
+    "Dashboard, review and webhook lifecycle are integrated": all(token in store for token in ("sms_webhook_deliveries", "enqueueWebhookDelivery", "markWebhookResult", "webhookStats"))
+        and all(token in webhook for token in ("event_id", "DATA_DELIVERY_ID", "enqueueWebhookDelivery"))
+        and all(token in webhook_worker for token in ("markWebhookAttempt", "FinancialConflictWebhookPolicy", "Result.retry()"))
+        and all(token in web_api for token in ("pending_activation_reviews", "get_webhook_deliveries", "webhook_failed"))
+        and all(token in html for token in ("dashPendingReviews", "dashWebhookPending", "webhookDeliveriesTable", "loadWebhookDeliveries")),
 }
 
 failed = [name for name, passed in checks.items() if not passed]

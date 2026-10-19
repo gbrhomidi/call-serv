@@ -39,6 +39,16 @@ internal class SmsActivationStore(context: Context) {
             UNIQUE(idempotency_key,event_type,attempt))""")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_sms_activation_status_provider ON sms_activation_requests(status, provider_phone)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_sms_activation_customer_service ON sms_activation_requests(customer_id, service_id, created_at)")
+        db.execSQL("""CREATE TABLE IF NOT EXISTS sms_webhook_deliveries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, event_key TEXT NOT NULL UNIQUE,
+            request_id INTEGER, event_type TEXT NOT NULL, payload_sha256 TEXT NOT NULL,
+            endpoint TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'queued',
+            attempt_count INTEGER NOT NULL DEFAULT 0, last_http_code INTEGER,
+            last_error TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL, delivered_at INTEGER
+        )""")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_webhook_status_updated ON sms_webhook_deliveries(status, updated_at DESC)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_webhook_request ON sms_webhook_deliveries(request_id, created_at DESC)")
     }
 
     private fun ensureColumn(table: String, column: String, definition: String) {
@@ -232,7 +242,8 @@ internal class SmsActivationStore(context: Context) {
         } ?: return null
         db.beginTransaction()
         try {
-            appendEvent(requestId, request.optString("idempotency_key"), "manual_review", request.optInt("attempt_count"), "outcome=$cleanOutcome;note=${note.take(160)}")
+                    val reviewAttempt = (System.currentTimeMillis() / 1000L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                    appendEvent(requestId, request.optString("idempotency_key"), "manual_review", reviewAttempt, "outcome=$cleanOutcome;note=${note.take(160)}")
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
         return resolved
@@ -432,6 +443,82 @@ internal class SmsActivationStore(context: Context) {
                 android.database.Cursor.FIELD_TYPE_FLOAT -> put(name, cursor.getDouble(i))
                 else -> put(name, cursor.getString(i))
             }
+        }
+    }
+
+    /** Creates one durable webhook delivery record; duplicate event keys reuse the same row. */
+    fun enqueueWebhookDelivery(
+        eventKey: String,
+        requestId: Long?,
+        eventType: String,
+        payloadSha256: String,
+        endpoint: String
+    ): Long {
+        val now = System.currentTimeMillis()
+        val values = ContentValues().apply {
+            put("event_key", eventKey); put("request_id", requestId)
+            put("event_type", eventType); put("payload_sha256", payloadSha256)
+            put("endpoint", endpoint); put("status", "queued")
+            put("created_at", now); put("updated_at", now)
+        }
+        val inserted = db.insertWithOnConflict("sms_webhook_deliveries", null, values, SQLiteDatabase.CONFLICT_IGNORE)
+        val id = if (inserted > 0) inserted else db.rawQuery(
+            "SELECT id FROM sms_webhook_deliveries WHERE event_key=?", arrayOf(eventKey)
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else -1L }
+        if (inserted > 0 && requestId != null) {
+            val request = getRequest(requestId)
+            if (request != null) {
+                db.beginTransaction()
+                try {
+                    appendEvent(requestId, request.optString("idempotency_key"), "webhook_queued", request.optInt("attempt_count"), "event=$eventType;delivery_id=$id")
+                    db.setTransactionSuccessful()
+                } finally { db.endTransaction() }
+            }
+        }
+        return id
+    }
+
+    fun markWebhookAttempt(deliveryId: Long): Int {
+        val now = System.currentTimeMillis()
+        db.execSQL("UPDATE sms_webhook_deliveries SET attempt_count=attempt_count+1,status='sending',updated_at=? WHERE id=?", arrayOf(now, deliveryId))
+        return db.rawQuery("SELECT attempt_count FROM sms_webhook_deliveries WHERE id=?", arrayOf(deliveryId.toString())).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+    }
+
+    fun markWebhookResult(deliveryId: Long, status: String, httpCode: Int?, error: String = "") {
+        require(status in setOf("delivered", "retry", "failed"))
+        val now = System.currentTimeMillis()
+        val values = ContentValues().apply {
+            put("status", status); put("updated_at", now); put("last_error", error.take(500))
+            if (httpCode == null) putNull("last_http_code") else put("last_http_code", httpCode)
+            if (status == "delivered") put("delivered_at", now)
+        }
+        db.update("sms_webhook_deliveries", values, "id=?", arrayOf(deliveryId.toString()))
+        val row = db.rawQuery("SELECT request_id,event_type,attempt_count FROM sms_webhook_deliveries WHERE id=?", arrayOf(deliveryId.toString())).use { cursor ->
+            if (!cursor.moveToFirst()) null else Triple(if (cursor.isNull(0)) null else cursor.getLong(0), cursor.getString(1), cursor.getInt(2))
+        }
+        if (row?.first != null) {
+            val request = getRequest(row.first!!)
+            if (request != null) {
+                db.beginTransaction()
+                try {
+                    appendEvent(row.first!!, request.optString("idempotency_key"), "webhook_$status", row.third, "event=${row.second};http=${httpCode ?: 0};error=${error.take(120)}")
+                    db.setTransactionSuccessful()
+                } finally { db.endTransaction() }
+            }
+        }
+    }
+
+    fun listWebhookDeliveries(limit: Int = 100): org.json.JSONArray = db.rawQuery(
+        "SELECT * FROM sms_webhook_deliveries ORDER BY updated_at DESC LIMIT ?", arrayOf(limit.coerceIn(1, 500).toString())
+    ).use { cursor -> org.json.JSONArray().also { result -> while (cursor.moveToNext()) result.put(cursorToJson(cursor)) } }
+
+    fun webhookStats(): JSONObject = db.rawQuery(
+        "SELECT status,COUNT(*) FROM sms_webhook_deliveries GROUP BY status", null
+    ).use { cursor ->
+        JSONObject().apply {
+            var total = 0
+            while (cursor.moveToNext()) { val count = cursor.getInt(1); total += count; put(cursor.getString(0), count) }
+            put("total", total)
         }
     }
 

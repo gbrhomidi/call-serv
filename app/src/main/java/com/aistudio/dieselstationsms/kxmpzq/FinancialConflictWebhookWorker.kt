@@ -26,7 +26,13 @@ internal class FinancialConflictWebhookWorker(
         val urlText = inputData.getString(FinancialConflictNotifier.DATA_URL).orEmpty()
         val payload = inputData.getString(FinancialConflictNotifier.DATA_PAYLOAD).orEmpty()
         val secret = inputData.getString(FinancialConflictNotifier.DATA_SECRET).orEmpty()
-        if (!urlText.startsWith("https://") || payload.isBlank()) return Result.failure()
+        val deliveryId = inputData.getLong(FinancialConflictNotifier.DATA_DELIVERY_ID, -1L)
+        val store = SmsActivationStore(applicationContext)
+        if (!urlText.startsWith("https://") || payload.isBlank() || deliveryId <= 0L) {
+            if (deliveryId > 0L) store.markWebhookResult(deliveryId, "failed", null, "invalid webhook input")
+            return Result.failure()
+        }
+        store.markWebhookAttempt(deliveryId)
         val connection = try {
             (URL(urlText).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -41,6 +47,7 @@ internal class FinancialConflictWebhookWorker(
             }
         } catch (e: Exception) {
             Log.w(TAG, "Webhook network failure; retrying", e)
+            store.markWebhookResult(deliveryId, "retry", null, e.javaClass.simpleName)
             return Result.retry()
         }
         return try {
@@ -57,16 +64,24 @@ internal class FinancialConflictWebhookWorker(
                     }
                 }
             }
-            when {
-                code in 200..299 -> Result.success()
-                code == 408 || code == 425 || code == 429 || code >= 500 -> Result.retry()
+            when (FinancialConflictWebhookPolicy.statusForHttp(code)) {
+                "delivered" -> {
+                    store.markWebhookResult(deliveryId, "delivered", code)
+                    Result.success()
+                }
+                "retry" -> {
+                    store.markWebhookResult(deliveryId, "retry", code, "HTTP $code")
+                    Result.retry()
+                }
                 else -> {
                     Log.e(TAG, "Webhook rejected event with HTTP $code")
+                    store.markWebhookResult(deliveryId, "failed", code, "HTTP $code")
                     Result.failure()
                 }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Webhook response failure; retrying", e)
+            store.markWebhookResult(deliveryId, "retry", null, e.javaClass.simpleName)
             Result.retry()
         } finally {
             connection.disconnect()
@@ -77,5 +92,14 @@ internal class FinancialConflictWebhookWorker(
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
         return mac.doFinal(payload.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+    }
+}
+
+/** Deterministic delivery policy shared by the worker tests and production path. */
+internal object FinancialConflictWebhookPolicy {
+    fun statusForHttp(code: Int): String = when {
+        code in 200..299 -> "delivered"
+        code == 408 || code == 425 || code == 429 || code >= 500 -> "retry"
+        else -> "failed"
     }
 }
