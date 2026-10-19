@@ -19,15 +19,20 @@ class SmsReceiver : BroadcastReceiver() {
         Thread({
             try {
                 val store = SmsActivationStore(context.applicationContext)
+                // A single SMS broadcast may contain multipart segments, but it can
+                // also contain two independent messages from the same sender. Group
+                // by timestamp as well; otherwise their bodies are concatenated and
+                // bank/provider parsing can be corrupted or silently rejected.
                 val grouped = messages.filter { !it.displayOriginatingAddress.isNullOrBlank() }
-                    .groupBy { it.displayOriginatingAddress!! }
-                grouped.forEach { (sender, parts) ->
+                    .groupBy { it.displayOriginatingAddress!! to it.timestampMillis }
+                grouped.forEach { (batch, parts) ->
+                    val sender = batch.first
                     val body = parts.joinToString(separator = "") { it.displayMessageBody.orEmpty() }.trim()
                     if (body.isBlank() || body.length > MAX_MESSAGE_LENGTH) {
                         Log.w(TAG, "Ignoring empty/oversized inbound SMS")
                         return@forEach
                     }
-                    val receivedAt = parts.minOfOrNull { it.timestampMillis } ?: System.currentTimeMillis()
+                    val receivedAt = batch.second
                     if (!store.claimIncoming(sender, body, receivedAt)) {
                         Log.d(TAG, "Duplicate inbound SMS ignored")
                         return@forEach
