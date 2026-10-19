@@ -1305,6 +1305,23 @@
         </div>
 
         <!-- ============================================================
+        ACTIVATION REVIEW SCREEN
+        ============================================================ -->
+        <div class="screen" id="screen-activation-reviews">
+            <div class="card">
+                <div class="card-title"><span class="icon">🧾</span> مراجعة طلبات التفعيل</div>
+                <div class="flex flex-wrap gap-1 mb-1">
+                    <button class="btn btn-primary" onclick="loadActivationReviews()">🔄 تحديث</button>
+                    <select class="form-control" id="activationReviewStatus" style="max-width:220px;" onchange="loadActivationReviews()">
+                        <option value="">كل الطلبات المعلقة</option><option value="uncertain">غير محسومة</option><option value="reconciling">قيد المصالحة</option><option value="awaiting_payment">بانتظار الدفع</option><option value="pending_provider">بانتظار المورد</option>
+                    </select>
+                </div>
+                <div class="table-container"><table class="data-table"><thead><tr><th>#</th><th>العميل</th><th>الخدمة</th><th>المبلغ</th><th>طريقة الدفع</th><th>الحالة</th><th>آخر تحديث</th><th>الإجراء</th></tr></thead><tbody id="activationReviewsTable"><tr><td colspan="8" class="text-center text-muted">جاري التحميل...</td></tr></tbody></table></div>
+                <div id="activationReviewEvents" class="mt-2"></div>
+            </div>
+        </div>
+
+        <!-- ============================================================
         REPORTS SCREEN
         ============================================================ -->
         <div class="screen" id="screen-reports">
@@ -1353,6 +1370,10 @@
                     </div>
                     <div class="form-group"><label><input type="checkbox" id="smsEnabled" checked> تفعيل رسائل SMS</label></div>
                     <div class="form-group"><label><input type="checkbox" id="appActive" checked> التطبيق نشط</label></div>
+                    <div class="form-group"><label>نوع الجهة المالية الظاهر لغير المسجلين</label><input type="text" class="form-control" id="systemBankInstitutionType" placeholder="البنك/الجهة"></div>
+                    <div class="form-group"><label>رابط Webhook للتعارضات المالية (HTTPS فقط)</label><input type="url" class="form-control" id="financialConflictWebhookUrl" placeholder="https://example.com/hooks/financial-conflict"></div>
+                    <div class="form-group"><label>سر Webhook (اختياري للتوقيع HMAC)</label><input type="password" class="form-control" id="financialConflictWebhookSecret" autocomplete="new-password"></div>
+                    <div class="form-group"><label><input type="checkbox" id="financialConflictWebhookEnabled"> تفعيل Webhook للتعارضات المالية</label></div>
                     <hr>
                     <div class="form-group">
                         <label>الحد الأدنى للتنبيه (لتر)</label>
@@ -1420,6 +1441,10 @@
         <button class="nav-item" onclick="showScreen('sms')" data-screen="sms">
             <span class="icon">📨</span>
             <span>الرسائل</span>
+        </button>
+        <button class="nav-item" onclick="showScreen('activation-reviews')" data-screen="activation-reviews">
+            <span class="icon">🧾</span>
+            <span>المراجعة</span>
         </button>
         <button class="nav-item" onclick="showScreen('settings')" data-screen="settings">
             <span class="icon">⚙️</span>
@@ -1713,6 +1738,7 @@
             else if (screenId === 'suppliers') loadSuppliers();
             else if (screenId === 'telecoms') loadTelecoms();
             else if (screenId === 'sms') loadSms();
+            else if (screenId === 'activation-reviews') loadActivationReviews();
             else if (screenId === 'notifications') loadNotifications();
         }
 
@@ -1752,7 +1778,11 @@
 
         const persistentSmsSettings = {
             smsEnabled: 'sms_enabled',
-            appActive: 'app_active'
+            appActive: 'app_active',
+            systemBankInstitutionType: 'system_bank_institution_type',
+            financialConflictWebhookUrl: 'financial_conflict_webhook_url',
+            financialConflictWebhookSecret: 'financial_conflict_webhook_secret',
+            financialConflictWebhookEnabled: 'financial_conflict_webhook_enabled'
         };
 
         let smsServiceCatalog = [];
@@ -1762,7 +1792,7 @@
                 const element = document.getElementById(elementId);
                 if (element) {
                     const value = window.AndroidInterface.getPersistentSetting(key) || '';
-                    if (element.type === 'checkbox') element.checked = value !== 'false';
+                    if (element.type === 'checkbox') element.checked = value === 'true' || value === '1';
                     else element.value = value;
                 }
             });
@@ -2384,6 +2414,57 @@
                     <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">${n.time}</div>
                 </div>
             `).join('');
+        }
+
+        async function loadActivationReviews() {
+            const status = document.getElementById('activationReviewStatus')?.value || '';
+            const result = await apiCall('get_activation_reviews', status ? { status } : {});
+            const tbody = document.getElementById('activationReviewsTable');
+            if (!tbody) return;
+            tbody.replaceChildren();
+            if (!result.success || !Array.isArray(result.data) || result.data.length === 0) {
+                const row = document.createElement('tr'); const cell = document.createElement('td');
+                cell.colSpan = 8; cell.className = 'text-center text-muted'; cell.textContent = result.error || 'لا توجد طلبات معلقة';
+                row.appendChild(cell); tbody.appendChild(row); return;
+            }
+            result.data.forEach((request, index) => {
+                const row = document.createElement('tr');
+                [index + 1, request.customer_name || request.customer_phone, request.service_name,
+                    `${((Number(request.amount_cents) || 0) / 100).toLocaleString()} ريال`, request.payment_method,
+                    request.status, new Date(Number(request.updated_at) || 0).toLocaleString('ar')].forEach(value => {
+                    const cell = document.createElement('td'); cell.textContent = String(value ?? ''); row.appendChild(cell);
+                });
+                const actions = document.createElement('td');
+                [['success', 'اعتماد'], ['failed', 'رفض'], ['uncertain', 'إبقاء معلقة']].forEach(([outcome, label]) => {
+                    const button = document.createElement('button'); button.className = `btn btn-sm ${outcome === 'success' ? 'btn-success' : outcome === 'failed' ? 'btn-danger' : 'btn-warning'}`; button.textContent = label;
+                    button.onclick = () => resolveActivationReview(request.id, outcome); actions.appendChild(button); actions.appendChild(document.createTextNode(' '));
+                });
+                const eventsButton = document.createElement('button'); eventsButton.className = 'btn btn-sm btn-outline'; eventsButton.textContent = 'السجل'; eventsButton.onclick = () => loadActivationEvents(request.id); actions.appendChild(eventsButton);
+                row.appendChild(actions); tbody.appendChild(row);
+            });
+        }
+
+        async function loadActivationEvents(id) {
+            const result = await apiCall('get_activation_events', { id });
+            const container = document.getElementById('activationReviewEvents');
+            if (!container) return;
+            container.replaceChildren();
+            const title = document.createElement('strong'); title.textContent = `السجل الزمني للطلب #${id}`; container.appendChild(title);
+            (result.success && Array.isArray(result.data) ? result.data : []).forEach(event => {
+                const line = document.createElement('div'); line.style.cssText = 'padding:6px 0;border-bottom:1px dashed var(--border-color);';
+                line.textContent = `${event.created_at || ''} — ${event.event_type || ''} — ${event.detail || ''}`; container.appendChild(line);
+            });
+        }
+
+        async function resolveActivationReview(id, outcome) {
+            const labels = { success: 'اعتماد التفعيل', failed: 'رفض الطلب', uncertain: 'إبقاؤه للمراجعة' };
+            const note = prompt(`ملاحظة ${labels[outcome]} (اختياري):`, '') ?? '';
+            if (!confirm(`هل تريد ${labels[outcome]} للطلب #${id}؟`)) return;
+            showLoading(true);
+            const result = await apiCall('resolve_activation_review', { id, outcome, note });
+            showLoading(false);
+            if (!result.success) { showToast(result.error || 'تعذر تحديث الطلب', 'error'); return; }
+            showToast('تم تحديث نتيجة المراجعة', 'success'); await loadActivationReviews(); await loadActivationEvents(id);
         }
 
         // ============================================================

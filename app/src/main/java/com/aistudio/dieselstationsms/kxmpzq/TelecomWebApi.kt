@@ -40,6 +40,9 @@ internal class TelecomWebApi(context: Context) {
                 "get_sms" -> mapArray(db.getSmsMetrics(), ::smsForUi)
                 "delete_sms" -> deleteSms(params)
                 "get_notifications" -> notifications()
+                "get_activation_reviews" -> SmsActivationStore(appContext).listReviewRequests(params.optString("status").ifBlank { null })
+                "get_activation_events" -> SmsActivationStore(appContext).getRequestEvents(requireLongId(params))
+                "resolve_activation_review" -> resolveActivationReview(params)
                 "generate_report" -> report(params.optString("report_type"))
                 "export_data" -> db.exportAllData()
                 else -> throw IllegalArgumentException("العملية غير مدعومة: $action")
@@ -216,6 +219,15 @@ internal class TelecomWebApi(context: Context) {
         return JSONObject().put("id", id)
     }
 
+    private fun resolveActivationReview(params: JSONObject): JSONObject {
+        val id = requireLongId(params)
+        val outcome = params.optString("outcome").trim()
+        val note = params.optString("note").trim().take(500)
+        val resolved = SmsActivationStore(appContext).resolveManual(id, outcome, note)
+            ?: throw IllegalArgumentException("الطلب غير موجود أو لا يمكن حسمه بالحالة الحالية")
+        return resolved
+    }
+
     private fun serviceForUi(row: JSONObject) = JSONObject(row.toString()).apply {
         put("name", row.optString("service_name_ar").ifBlank { row.optString("service_name") })
         put("code", row.optString("service_code"))
@@ -294,6 +306,9 @@ internal class TelecomWebApi(context: Context) {
     private fun requireId(params: JSONObject): Int = params.optInt("id", 0).also {
         require(it > 0) { "معرف السجل غير صالح" }
     }
+    private fun requireLongId(params: JSONObject): Long = params.optLong("id", 0L).also {
+        require(it > 0L) { "معرف الطلب غير صالح" }
+    }
 
     private fun successMessage(action: String): String? = when (action) {
         "save_service" -> "تم حفظ الخدمة"
@@ -302,6 +317,7 @@ internal class TelecomWebApi(context: Context) {
         "save_telecom_company" -> "تم حفظ شركة الاتصالات"
         "delete_telecom_company" -> "تم حذف شركة الاتصالات"
         "delete_service", "delete_customer", "delete_supplier", "delete_sms" -> "تم الحذف"
+        "resolve_activation_review" -> "تم تحديث نتيجة المراجعة اليدوية"
         else -> null
     }
 

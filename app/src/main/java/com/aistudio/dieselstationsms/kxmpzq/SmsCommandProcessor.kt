@@ -55,6 +55,7 @@ internal object SmsCommandProcessor {
             if (request == null) {
                 Log.w(TAG, "Bank payment SMS rejected: strict reconciliation mismatch")
                 helper.logSms(sender, body, "bank_notice", "rejected: strict reconciliation mismatch")
+                FinancialConflictNotifier.enqueue(context, "bank_reconciliation_conflict", sender, null, "strict reconciliation mismatch", body)
                 return
             }
             helper.logSms(sender, body, "bank_notice", "verified")
@@ -69,13 +70,33 @@ internal object SmsCommandProcessor {
             return
         }
 
+        val message = SmsTextAnalysis.normalize(body)
         val customer = helper.getCustomerByPhone(sender)
         if (customer == null || customer.optString("status", "active") != "active" || customer.optInt("is_blocked", 0) == 1) {
-            helper.logSms(sender, body, "received", if (customer?.optInt("is_blocked", 0) == 1) "ignored: customer blocked" else "ignored: unknown or inactive customer")
+            val requestedService = SmsTextAnalysis.findService(body, helper.getServices(status = "active"))
+            if (customer?.optInt("is_blocked", 0) == 1) {
+                helper.logSms(sender, body, "activation_request", "rejected: customer blocked")
+                reply(context, helper, sender, "تعذر تنفيذ الطلب لأن الرقم محظور في التطبيق. تواصل مع الدعم لمراجعة الحالة.")
+            } else if (requestedService != null) {
+                val serviceName = requestedService.optString("service_name_ar").ifBlank { requestedService.optString("service_name", "الخدمة") }
+                val amount = requestedService.optDouble("price", 0.0)
+                val bankName = helper.getSetting("system_bank_name").trim().ifBlank { "البنك/الجهة المحددة في إعدادات التطبيق" }
+                val accountName = helper.getSetting("system_bank_account_name").trim()
+                val institutionType = helper.getSetting("system_bank_institution_type").trim().ifBlank { "البنك/الجهة" }
+                val paymentMessage = if (accountName.isBlank() || amount <= 0.0) {
+                    "عذراً منك، لا يمكنني تفعيل الخدمة التي طلبتها لأنك لست مضافاً في التطبيق. لا يمكن إصدار تعليمات دفع قبل اكتمال إعدادات الحساب؛ تواصل مع الدعم لإضافة رقمك والتحقق من الطلب."
+                } else {
+                    "عذراً منك، لا يمكنني تفعيل $serviceName لأنك لست مضافاً في التطبيق. حوّل قيمة الخدمة ${formatMoney(amount)} ريال إلى الحساب $accountName لدى $institutionType - $bankName كما يظهر في رسالة البنك، وذلك من أجل تفعيل الخدمة التي طلبتها مؤخراً. لا تُرسل رمز التحقق أو بيانات البطاقة، وتواصل مع الدعم لإضافة رقمك قبل التفعيل."
+                }
+                helper.logSms(sender, body, "activation_request", "rejected: unregistered customer; payment instructions sent")
+                reply(context, helper, sender, paymentMessage)
+            } else {
+                helper.logSms(sender, body, "received", "ignored: unknown or inactive customer")
+                reply(context, helper, sender, "عذراً، رقمك غير مضاف في التطبيق ولم أستطع تحديد الخدمة المطلوبة. أرسل اسم الخدمة بوضوح أو تواصل مع الدعم لإضافة رقمك.")
+            }
             return
         }
         helper.logSms(sender, body, "received", "processing")
-        val message = SmsTextAnalysis.normalize(body)
 
         if (message == "رصيدي" || message == "رصيدي الحالي" || message == "رصيد" || message == "balance") {
             val balance = customer.optDouble("current_balance", 0.0)
@@ -164,6 +185,7 @@ internal object SmsCommandProcessor {
             val balance = extractLastBalance(body)
             if (balance == null) {
                 store.markUncertain(requestId, "أكد المورد عدم التنفيذ لكنه لم يرسل رصيداً قابلاً للمطابقة")
+                FinancialConflictNotifier.enqueue(context, "provider_reconciliation_conflict", sender, requestId, "provider non-execution lacked comparable balance", body)
                 reply(context, helper, request.optString("customer_phone"), "أكد المورد عدم تنفيذ طلب ${request.optString("service_name")}، لكن تعذر التحقق من الرصيد قبل أي إعادة. أوقفنا المحاولة تلقائياً؛ تواصل مع الدعم للمراجعة.")
                 helper.logSms(sender, body, "provider_reconciliation", "explicit non-execution without comparable balance")
                 return
@@ -175,6 +197,7 @@ internal object SmsCommandProcessor {
                 helper.logSms(sender, body, "provider_reconciliation", "explicit non-execution and unchanged balance; one retry dispatched")
             } else {
                 reply(context, helper, request.optString("customer_phone"), "تعذر إثبات شروط إعادة طلب ${request.optString("service_name")} بأمان؛ أوقفنا أي محاولة إضافية لتجنب الخصم المزدوج. تواصل مع الدعم.")
+                FinancialConflictNotifier.enqueue(context, "provider_reconciliation_conflict", sender, requestId, "safe retry refused", body)
                 helper.logSms(sender, body, "provider_reconciliation", "retry refused; evidence or baseline mismatch")
             }
             return
@@ -182,6 +205,7 @@ internal object SmsCommandProcessor {
         if (SmsTextAnalysis.isFailureMessage(body)) {
             Log.w(TAG, "Provider reported activation failure request=$requestId")
             store.markUncertain(requestId, "أفاد المورد بفشل التفعيل لكن لم يثبت عدم الخصم نهائياً")
+            FinancialConflictNotifier.enqueue(context, "provider_financial_conflict", sender, requestId, "provider reported failure with unresolved financial outcome", body)
             val message = if (request.optString("payment_method") == "bank") {
                 "أفاد المورد بتعذر تفعيل ${request.optString("service_name")}، لكن أثر العملية المالي لم يُحسم بعد. لا تعِد التحويل أو الطلب؛ أوقفنا الإعادة الآلية وأحلنا الحالة للمراجعة."
             } else {
@@ -293,6 +317,7 @@ internal object SmsCommandProcessor {
         val serviceName = request.optString("service_name", "الخدمة")
         if (request.optString("payment_method") == "bank") {
             store.markUncertain(requestId, reason)
+            FinancialConflictNotifier.enqueue(context, "activation_dispatch_conflict", customerPhone, requestId, reason, customerDetail)
             reply(context, helper, customerPhone,
                 "تم التحقق من تحويلك مقابل $serviceName، لكن $customerDetail. لا تعِد التحويل أو الطلب؛ تواصل مع الدعم لمراجعة الحالة.")
         } else {

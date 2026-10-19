@@ -201,6 +201,43 @@ internal class SmsActivationStore(context: Context) {
         "SELECT * FROM sms_activation_requests WHERE id=?", arrayOf(id.toString())
     ).use { if (it.moveToFirst()) cursorToJson(it) else null }
 
+    fun listReviewRequests(status: String? = null): org.json.JSONArray {
+        val allowed = setOf("awaiting_payment", "pending_provider", "reconciling", "retry_ready", "uncertain", "failed", "success")
+        val normalized = status?.takeIf { it in allowed }
+        val sql = if (normalized == null) {
+            "SELECT * FROM sms_activation_requests WHERE status IN ('awaiting_payment','pending_provider','reconciling','retry_ready','uncertain') ORDER BY updated_at DESC LIMIT 500"
+        } else {
+            "SELECT * FROM sms_activation_requests WHERE status=? ORDER BY updated_at DESC LIMIT 500"
+        }
+        return db.rawQuery(sql, normalized?.let { arrayOf(it) }).use { cursor ->
+            org.json.JSONArray().also { result -> while (cursor.moveToNext()) result.put(cursorToJson(cursor)) }
+        }
+    }
+
+    fun getRequestEvents(requestId: Long): org.json.JSONArray = db.rawQuery(
+        "SELECT * FROM sms_activation_events WHERE request_id=? ORDER BY created_at ASC, id ASC",
+        arrayOf(requestId.toString())
+    ).use { cursor ->
+        org.json.JSONArray().also { result -> while (cursor.moveToNext()) result.put(cursorToJson(cursor)) }
+    }
+
+    fun resolveManual(requestId: Long, outcome: String, note: String): JSONObject? {
+        val cleanOutcome = outcome.trim().lowercase()
+        require(cleanOutcome in setOf("success", "failed", "uncertain")) { "نتيجة المراجعة غير صالحة" }
+        val request = getRequest(requestId) ?: return null
+        val resolved = when (cleanOutcome) {
+            "success" -> completeSuccess(requestId, note.ifBlank { "تم اعتماد التفعيل يدوياً" })
+            "failed" -> if (markFailed(requestId, note.ifBlank { "تم رفض الطلب يدوياً" })) getRequest(requestId) else null
+            else -> if (markUncertain(requestId, note.ifBlank { "أُعيدت الحالة للمراجعة" })) getRequest(requestId) else null
+        } ?: return null
+        db.beginTransaction()
+        try {
+            appendEvent(requestId, request.optString("idempotency_key"), "manual_review", request.optInt("attempt_count"), "outcome=$cleanOutcome;note=${note.take(160)}")
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+        return resolved
+    }
+
     fun markDispatching(id: Long, attempt: Int): Boolean {
         if (attempt !in 1..2) return false
         val values = ContentValues().apply {

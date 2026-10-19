@@ -559,15 +559,15 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun getPersistentSetting(key: String): String {
-            val allowed = setOf("system_bank_name", "system_bank_account_name", "system_bank_sender_phone", "activation_provider_phone", "activation_provider_balance", "supplier_balance_query_sms", "sms_enabled", "app_active")
+            val allowed = setOf("system_bank_name", "system_bank_account_name", "system_bank_institution_type", "system_bank_sender_phone", "activation_provider_phone", "activation_provider_balance", "supplier_balance_query_sms", "financial_conflict_webhook_url", "financial_conflict_webhook_secret", "financial_conflict_webhook_enabled", "sms_enabled", "app_active")
             if (key !in allowed) return ""
             return try { DatabaseHelper.getInstance(context).getSetting(key) } catch (_: Exception) { "" }
         }
 
         @JavascriptInterface
         fun setPersistentSetting(key: String, value: String): Boolean {
-            val allowed = setOf("system_bank_name", "system_bank_account_name", "system_bank_sender_phone", "activation_provider_phone", "activation_provider_balance", "supplier_balance_query_sms", "sms_enabled", "app_active")
-            if (key !in allowed || value.length > 200 || (key in setOf("sms_enabled", "app_active") && value !in setOf("true", "false"))) return false
+            val allowed = setOf("system_bank_name", "system_bank_account_name", "system_bank_institution_type", "system_bank_sender_phone", "activation_provider_phone", "activation_provider_balance", "supplier_balance_query_sms", "financial_conflict_webhook_url", "financial_conflict_webhook_secret", "financial_conflict_webhook_enabled", "sms_enabled", "app_active")
+            if (key !in allowed || value.length > 500 || (key in setOf("sms_enabled", "app_active", "financial_conflict_webhook_enabled") && value !in setOf("true", "false", "1", "0"))) return false
             return try { DatabaseHelper.getInstance(context).setSetting(key, value.trim()) } catch (_: Exception) { false }
         }
 

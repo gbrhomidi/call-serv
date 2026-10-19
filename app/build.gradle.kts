@@ -24,8 +24,8 @@ android {
         minSdk = 21
         targetSdk = 34
         // Keep the applicationId/signing key stable and increment for the signed upgrade build.
-        versionCode = 303
-        versionName = "3.0.3"
+        versionCode = 304
+        versionName = "3.0.4"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

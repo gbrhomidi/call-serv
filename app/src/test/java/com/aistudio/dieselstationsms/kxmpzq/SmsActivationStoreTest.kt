@@ -17,6 +17,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -286,6 +288,25 @@ class SmsActivationStoreTest {
     }
 
     @Test
+    fun `same idempotency key remains one request under concurrent pressure`() {
+        val customer = customer(name = "ضغط التكرار", phone = "777666780", allowCredit = true, creditLimit = 100.0)
+        val service = service(price = 9.0)
+        val key = "smsv1_${"p".repeat(64)}"
+        val executor = Executors.newFixedThreadPool(16)
+        try {
+            val results = executor.invokeAll((0 until 64).map {
+                Callable { store.createRequest(customer, service, customer.getString("phone1"), key) }
+            }).map { it.get() }
+            val ids = results.map { it.getLong("id") }.toSet()
+            assertEquals(setOf(ids.single()), ids)
+            assertEquals(1L, count("SELECT count(*) FROM sms_activation_requests WHERE idempotency_key='$key'"))
+            assertEquals(0L, count("SELECT count(*) FROM activations"))
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
     fun `changed supplier balance blocks retry and marks request uncertain`() {
         val customer = customer(name = "رصيد متغير", phone = "777777111", allowCredit = true, creditLimit = 100.0)
         val request = store.createRequest(customer, service(price = 9.0), customer.getString("phone1"))
@@ -369,6 +390,21 @@ class SmsActivationStoreTest {
         assertEquals(0L, count("SELECT count(*) FROM sms_activation_requests"))
     }
 
+    @Test
+    fun `unregistered customer receives payment instructions for a known service`() {
+        shadowOf(context.applicationContext as Application).grantPermissions(Manifest.permission.SEND_SMS)
+        service(price = 300.0, command = "*300*(phone)#", name = "باقة ماكس 300")
+
+        SmsCommandProcessor.process(context, "777999001", "تفعيل باقة ماكس 300")
+
+        assertEquals(0L, count("SELECT count(*) FROM sms_activation_requests"))
+        val metrics = helper.getSmsMetrics()
+        assertTrue((0 until metrics.length()).any {
+            val row = metrics.optJSONObject(it)
+            row?.optString("event_type") == "auto_reply" && row.optString("details") == "sent"
+        })
+    }
+
     private fun setDefaultSettings() {
         helper.setSetting("system_bank_name", "مصرف الأمل")
         helper.setSetting("system_bank_account_name", "مؤسسة الاتصالات")
@@ -396,12 +432,12 @@ class SmsActivationStoreTest {
         return helper.getCustomerById(id.toInt())!!
     }
 
-    private fun service(price: Double, command: String = "*123*(phone)#"): JSONObject {
+    private fun service(price: Double, command: String = "*123*(phone)#", name: String = "خدمة اختبار"): JSONObject {
         val code = "TEST-${System.nanoTime()}"
         val id = helper.addService(JSONObject()
             .put("service_code", code)
-            .put("service_name", "Test $code")
-            .put("service_name_ar", "خدمة اختبار")
+            .put("service_name", name)
+            .put("service_name_ar", name)
             .put("service_type", "topup")
             .put("price", price)
             .put("activation_command", command)

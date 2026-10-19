@@ -542,6 +542,10 @@ class DatabaseHelper(private val context: Context) :
             arrayOf("vip_min_balance", "5000", "integer", "finance", "الحد الأدنى للرصيد لتصنيف VIP"),
             arrayOf("vip_discount_percent", "10", "integer", "finance", "نسبة الخصم للعملاء VIP"),
             arrayOf("push_notifications_enabled", "0", "boolean", "notifications", "تفعيل إشعارات Push"),
+            arrayOf("system_bank_institution_type", "البنك/الجهة", "string", "sms", "نوع الجهة المالية الظاهر للعميل غير المسجل"),
+            arrayOf("financial_conflict_webhook_enabled", "0", "boolean", "notifications", "تفعيل Webhook للتعارضات المالية"),
+            arrayOf("financial_conflict_webhook_url", "", "string", "notifications", "رابط Webhook للتعارضات المالية"),
+            arrayOf("financial_conflict_webhook_secret", "", "secret", "notifications", "سر توقيع Webhook للتعارضات المالية"),
             arrayOf("retention_days", "90", "integer", "system", "عدد أيام الاحتفاظ بالسجلات")
         )
 
