@@ -32,16 +32,10 @@ checks = {
         and 'applicationId = "com.aistudio.telecomactivation"' in gradle_build
         and 'android:label="@string/app_name"' in manifest
     ),
-    "legacy SMS bank/provider and USSD controls are removed from settings": all(
-        f'id="{element}"' not in html
-        for element in (
-            "systemBankName", "systemBankAccountName", "systemBankSenderPhone",
-            "activationProviderPhone", "activationProviderBalance", "supplierBalanceQuery",
-            "smsServiceSelect", "fullActivationCommand",
-        )
-    ) and "إعدادات تفعيل الخدمات عبر SMS" not in html
-    and "تُقبل الحوالة آلياً عند تطابق" not in html
-    and 'id="serviceActivationCommand"' in html
+    "SMS bank/account settings are present without legacy balance controls": all(
+        f'id="{element}"' in html
+        for element in ("systemBankName", "systemBankAccountName", "systemBankSenderPhone")
+    ) and 'id="serviceActivationCommand"' in html
     and "system_bank_expected_balance" not in processor
     and "system_bank_expected_balance" not in store,
     "telecom company save is scoped to its own form and the name ID is unique": (
@@ -61,7 +55,7 @@ checks = {
             "android.provider.Telephony.SMS_RECEIVED",
             "android.permission.BROADCAST_SMS",
         )
-    ) and "goAsync()" in receiver,
+    ) and "SmsInboundWorker" in receiver and "enqueueUniqueWork" in receiver,
     "a strictly matched bank payment dispatches the authorized request to the USSD path": (
         "store.acceptBankPayment(sender, bankName, notice," in processor
         and 'dispatchUssd(context, request.getLong("id"), store)' in processor

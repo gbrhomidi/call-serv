@@ -21,7 +21,9 @@ import org.json.JSONObject
 
 internal object SmsCommandProcessor {
     private const val TAG = "SmsCommandProcessor"
-    private const val MAX_REPLY_PARTS = 4
+    // Arabic payment instructions can exceed four GSM/UCS-2 segments. Keep a
+    // bounded upper limit, but do not silently cut the bank/account details.
+    private const val MAX_REPLY_PARTS = 8
 
     fun process(context: Context, sender: String, body: String, inboundIdempotencyKey: String? = null) {
         val helper = DatabaseHelper.getInstance(context)

@@ -307,6 +307,24 @@ class SmsActivationStoreTest {
     }
 
     @Test
+    fun `concurrent provider confirmations create one activation and post credit once`() {
+        val customer = customer(name = "ضغط التأكيد", phone = "777666781", allowCredit = true, creditLimit = 100.0)
+        val request = store.createRequest(customer, service(price = 9.0), customer.getString("phone1"))
+        val requestId = request.getLong("id")
+        val executor = Executors.newFixedThreadPool(16)
+        try {
+            val results = executor.invokeAll((0 until 64).map {
+                Callable { store.completeSuccess(requestId, "تم التفعيل بنجاح") }
+            }).map { it.get() }
+            assertTrue(results.all { it != null })
+            assertEquals(1L, count("SELECT count(*) FROM activations WHERE sms_request_id=$requestId"))
+            assertEquals(9.0, helper.getCustomerById(customer.getInt("id"))!!.getDouble("current_balance"), 0.001)
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
     fun `changed supplier balance blocks retry and marks request uncertain`() {
         val customer = customer(name = "رصيد متغير", phone = "777777111", allowCredit = true, creditLimit = 100.0)
         val request = store.createRequest(customer, service(price = 9.0), customer.getString("phone1"))
