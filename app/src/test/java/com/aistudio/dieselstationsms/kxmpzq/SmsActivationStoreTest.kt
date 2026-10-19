@@ -401,7 +401,7 @@ class SmsActivationStoreTest {
         val metrics = helper.getSmsMetrics()
         assertTrue((0 until metrics.length()).any {
             val row = metrics.optJSONObject(it)
-            row?.optString("event_type") == "auto_reply" && row.optString("details") == "sent"
+            row?.optString("event_type") == "activation_request" && row.optString("details").contains("payment instructions sent")
         })
     }
 
