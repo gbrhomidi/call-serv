@@ -90,7 +90,12 @@ internal object SmsCommandProcessor {
                 } else {
                     "عذراً منك، لا يمكنني تفعيل $serviceName لأنك لست مضافاً في التطبيق. حوّل قيمة الخدمة ${formatMoney(amount)} ريال إلى الحساب $accountName لدى $institutionType - $bankName كما يظهر في رسالة البنك، وذلك من أجل تفعيل الخدمة التي طلبتها مؤخراً. لا تُرسل رمز التحقق أو بيانات البطاقة، وتواصل مع الدعم لإضافة رقمك قبل التفعيل."
                 }
-                helper.logSms(sender, body, "activation_request", "rejected: unregistered customer; payment instructions sent")
+                val auditDetail = "rejected: unregistered customer; payment instructions sent"
+                helper.logSms(sender, body, "activation_request", auditDetail)
+                // Keep a stable semantic event for reports/review screens. The
+                // SMS log uses a composite event name for backwards
+                // compatibility, so it cannot replace this domain event.
+                helper.recordEvent("activation_request", sender, auditDetail)
                 reply(context, helper, sender, paymentMessage)
             } else {
                 helper.logSms(sender, body, "received", "ignored: unknown or inactive customer")
